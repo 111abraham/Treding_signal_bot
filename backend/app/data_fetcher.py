@@ -78,11 +78,11 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 class MarketDataFetcher:
     """Fetches and normalizes multi-asset OHLCV data using yfinance."""
 
-    # Map intervals to appropriate yfinance periods
+    # Map intervals to appropriate yfinance periods (optimized for 500 candles + fast download)
     INTERVAL_PERIOD_MAP = {
-        "5m": "30d",
-        "15m": "30d",
-        "30m": "30d",
+        "5m": "5d",     # 5 days = ~1,300 5-min candles (well above 500 target, 6x faster)
+        "15m": "14d",   # 14 days = ~1,300 15-min candles
+        "30m": "25d",
         "1h": "60d",
         "4h": "120d",
         "1d": "2y"
@@ -172,8 +172,9 @@ class MarketDataFetcher:
             df = ticker.history(period=period, interval=fetch_interval, auto_adjust=False)
             
             if df.empty or len(df) < 30:
-                # Fallback to wider period
-                df = ticker.history(period="max", interval=fetch_interval, auto_adjust=False)
+                # Fallback to wider period (never use 'max' for sub-hourly as Yahoo rejects it)
+                fallback_period = "60d" if interval in ["5m", "15m", "30m"] else "max"
+                df = ticker.history(period=fallback_period, interval=fetch_interval, auto_adjust=False)
 
             if df.empty:
                 return pd.DataFrame(), f"No historical candle data returned for symbol '{symbol}'."

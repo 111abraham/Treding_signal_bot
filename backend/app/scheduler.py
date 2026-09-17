@@ -24,19 +24,23 @@ class ScanEngine:
         self.current_status: str = "Idle"
 
     async def scan_all_assets(self, force_notify: bool = False) -> Dict[str, Any]:
-        """Runs a complete scan cycle across all active watchlist assets."""
+        """Runs a multi-timeframe scan cycle across all active watchlist assets concurrently."""
         if self.is_scanning:
             return {"status": "already_scanning", "message": "A scan is already in progress."}
 
         self.is_scanning = True
-        self.current_status = "Scanning active assets..."
+        self.current_status = "Initializing multi-timeframe scan..."
         results = []
         new_signals = []
 
         cfg = config_manager.get_all()
         watchlist = cfg.get("watchlist", [])
         active_assets = [item for item in watchlist if item.get("active", True)]
-        timeframe = cfg.get("timeframe", "1h")
+        # Multi-timeframe list: e.g. ["5m", "15m", "1h", "4h"]
+        scan_timeframes = cfg.get("scan_timeframes") or ["5m", "15m", "1h", "4h"]
+        if isinstance(scan_timeframes, str):
+            scan_timeframes = [scan_timeframes]
+
         telegram_cfg = cfg.get("telegram", {})
         telegram_enabled = telegram_cfg.get("enabled", False)
         strat_cfg = cfg.get("strategy", {})
@@ -48,70 +52,59 @@ class ScanEngine:
         )
 
         try:
-            total = len(active_assets)
-            for idx, asset in enumerate(active_assets):
+            total_combinations = len(active_assets) * len(scan_timeframes)
+            completed_count = 0
+            sem = asyncio.Semaphore(5)  # 5 concurrent workers for fast, rate-limit-safe downloads
+
+            async def scan_asset_timeframe(asset: Dict[str, Any], tf: str):
+                nonlocal completed_count
                 sym = asset["symbol"]
                 name = asset.get("name", sym)
-                self.current_status = f"Forecasting {sym} ({idx + 1}/{total})..."
-                logger.info(f"Scanning asset {sym} ({name}) on {timeframe}...")
 
-                try:
-                    # 1. Fetch 500 candles
-                    df, err = MarketDataFetcher.fetch_candles(sym, interval=timeframe, target_count=500)
-                    if err or df.empty:
-                        logger.warning(f"Could not fetch data for {sym}: {err}")
-                        continue
-                    
-                    df.attrs["symbol"] = sym
+                async with sem:
+                    try:
+                        # 1. Fetch 500 candles in thread pool
+                        df, err = await asyncio.to_thread(MarketDataFetcher.fetch_candles, sym, tf, 500)
+                        if err or df.empty:
+                            return None
+                        
+                        df.attrs["symbol"] = sym
 
-                    # 2. Run AI 5-step forecast
-                    forecast = ai_engine.forecast_next_5(df, interval=timeframe, prediction_length=5)
-                    self.latest_forecasts[sym] = forecast
+                        # 2. Run AI 5-step forecast
+                        forecast = ai_engine.forecast_next_5(df, interval=tf, prediction_length=5)
+                        self.latest_forecasts[f"{sym}_{tf}"] = forecast
 
-                    # 3. Evaluate trading setup & spread filters
-                    signal = signal_generator.evaluate_signal(forecast, df, asset, strat_cfg)
+                        # 3. Evaluate trading setup & spread filters
+                        signal = signal_generator.evaluate_signal(forecast, df, asset, strat_cfg)
+                        if signal:
+                            signal["timeframe"] = tf
+                            results.append(signal)
 
-                    if signal:
-                        results.append(signal)
+                            if signal.get("is_actionable"):
+                                new_signals.append(signal)
+                                self._add_to_history(signal)
+                                outcome_tracker.register_signal(signal)
+                                await self._dispatch_telegram(signal, force_notify, telegram_enabled)
+                                return signal
+                    except Exception as ex:
+                        logger.error(f"Error scanning {sym} on {tf}: {ex}")
+                    finally:
+                        completed_count += 1
+                        pct = int((completed_count / max(1, total_combinations)) * 100)
+                        self.current_status = f"Scanning multi-timeframes: {pct}% ({completed_count}/{total_combinations} tasks)..."
+                return None
 
-                        # If signal is actionable (passed spread < 5% SL and high conviction)
-                        if signal.get("is_actionable"):
-                            new_signals.append(signal)
-                            self._add_to_history(signal)
-                            outcome_tracker.register_signal(signal)
-                            await self._dispatch_telegram(signal, force_notify, telegram_enabled)
-
-                    # 4. Multi-Timeframe Safety Net: If operating on low timeframe (5m or 15m),
-                    # also inspect Higher Timeframe (1h) so the trader never misses macro moves!
-                    if timeframe in ["5m", "15m"]:
-                        try:
-                            df_htf, err_htf = MarketDataFetcher.fetch_candles(sym, interval="1h", target_count=500)
-                            if not err_htf and not df_htf.empty:
-                                df_htf.attrs["symbol"] = sym
-                                fc_htf = ai_engine.forecast_next_5(df_htf, interval="1h", prediction_length=5)
-                                sig_htf = signal_generator.evaluate_signal(fc_htf, df_htf, asset, strat_cfg)
-                                if sig_htf and sig_htf.get("is_actionable") and sig_htf.get("conviction", 0) >= 70:
-                                    sig_htf["is_htf_opportunity"] = True
-                                    sig_htf["note"] = "Macro 1h Opportunity detected while on lower timeframe"
-                                    new_signals.append(sig_htf)
-                                    self._add_to_history(sig_htf)
-                                    outcome_tracker.register_signal(sig_htf)
-                                    await self._dispatch_telegram(sig_htf, force_notify, telegram_enabled)
-                        except Exception as e_htf:
-                            logger.debug(f"HTF check skipped for {sym}: {e_htf}")
-
-                except Exception as e:
-                    logger.error(f"Error during scan of {sym}: {e}", exc_info=True)
-
-                # Minor delay to prevent aggressive rate limiting
-                await asyncio.sleep(0.1)
+            # Execute all asset-timeframe tasks concurrently
+            tasks = [scan_asset_timeframe(asset, tf) for asset in active_assets for tf in scan_timeframes]
+            await asyncio.gather(*tasks)
 
             self.last_scan_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            self.current_status = f"Completed at {self.last_scan_time}. Found {len(new_signals)} actionable signals."
+            self.current_status = f"Completed at {self.last_scan_time}. Scanned {len(scan_timeframes)} TFs across {len(active_assets)} assets. Found {len(new_signals)} actionable signals."
 
             return {
                 "status": "success",
                 "scanned_count": len(active_assets),
+                "timeframes": scan_timeframes,
                 "actionable_signals": new_signals,
                 "all_evaluations": results,
                 "timestamp": self.last_scan_time
@@ -138,9 +131,18 @@ class ScanEngine:
         last_alert = self.alerted_cooldown.get(cooldown_key)
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        # Alert cooldown: 1.5 hours for same asset, direction, and timeframe
+        # Dynamic cooldown based on timeframe:
+        # 5m: 20 min | 15m: 40 min | 1h: 90 min | 4h: 4 hr | 1d: 12 hr
+        cooldown_secs = {
+            "5m": 1200,
+            "15m": 2400,
+            "1h": 5400,
+            "4h": 14400,
+            "1d": 43200
+        }.get(tf, 3600)
+
         should_send = force_notify or (
-            last_alert is None or (now - last_alert).total_seconds() > 5400
+            last_alert is None or (now - last_alert).total_seconds() > cooldown_secs
         )
 
         if should_send:

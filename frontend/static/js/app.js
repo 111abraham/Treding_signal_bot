@@ -731,6 +731,12 @@ function setupEventListeners() {
       document.getElementById("minConviction").value = cfg.strategy?.min_conviction || 65;
       document.getElementById("scanInterval").value = cfg.scan_interval_minutes || 15;
       document.getElementById("autoScanEnabled").checked = cfg.auto_scan_enabled !== false;
+
+      // Populate multi-timeframe checkboxes
+      const savedTfs = cfg.scan_timeframes || ["5m", "15m", "1h", "4h"];
+      document.querySelectorAll(".scan-tf-check").forEach((cb) => {
+        cb.checked = savedTfs.includes(cb.value);
+      });
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -748,11 +754,16 @@ function setupEventListeners() {
       chat_id: document.getElementById("tgChatId").value,
       enabled: document.getElementById("tgEnabled").checked,
     };
+
+    // Collect selected multi-timeframe targets
+    const selectedTfs = Array.from(document.querySelectorAll(".scan-tf-check:checked")).map((cb) => cb.value);
+
     const stratData = {
       max_spread_to_sl_ratio: parseFloat(document.getElementById("maxSpreadRatio").value),
       min_conviction: parseFloat(document.getElementById("minConviction").value),
       scan_interval_minutes: parseInt(document.getElementById("scanInterval").value),
       auto_scan_enabled: document.getElementById("autoScanEnabled").checked,
+      scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
     };
 
     await fetch("/api/settings/telegram", {

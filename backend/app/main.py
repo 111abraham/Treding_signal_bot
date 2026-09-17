@@ -83,6 +83,7 @@ class TelegramSettingsRequest(BaseModel):
 
 class StrategySettingsRequest(BaseModel):
     timeframe: Optional[str] = None
+    scan_timeframes: Optional[List[str]] = None
     max_spread_to_sl_ratio: Optional[float] = None
     require_london_ny_overlap: Optional[bool] = None
     min_conviction: Optional[float] = None
@@ -257,6 +258,8 @@ async def update_strategy_settings(req: StrategySettingsRequest):
     updates: Dict[str, Any] = {}
     if req.timeframe:
         updates["timeframe"] = req.timeframe
+    if req.scan_timeframes is not None:
+        updates["scan_timeframes"] = req.scan_timeframes
     if req.scan_interval_minutes is not None:
         updates["scan_interval_minutes"] = req.scan_interval_minutes
     if req.auto_scan_enabled is not None:

@@ -321,6 +321,17 @@
                 <label for="scanInterval">Background Scan Interval (Minutes)</label>
                 <input type="number" id="scanInterval" min="5" max="120" value="15" />
               </div>
+              <div class="form-group">
+                <label>Multi-Timeframe Scanning Targets</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="5m" checked /> 5m (Micro-Scalp)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="15m" checked /> 15m (Scalp)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="1h" checked /> 1h (Intraday)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="4h" checked /> 4h (Swing)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="1d" /> 1D (Daily)</label>
+                </div>
+                <small>Select all timeframes the background AI engine will scan across your watchlist.</small>
+              </div>
               <div class="form-group toggle-group">
                 <label for="autoScanEnabled">Enable Automated Background Scanning</label>
                 <input type="checkbox" id="autoScanEnabled" checked />

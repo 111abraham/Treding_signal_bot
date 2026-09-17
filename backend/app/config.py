@@ -9,7 +9,8 @@ CONFIG_FILE = BASE_DIR / "config.json"
 DEFAULT_CONFIG: Dict[str, Any] = {
     "app_name": "AI Quant Trading Forecast Terminal",
     "version": "1.0.0",
-    "timeframe": "1h",  # '15m', '1h', '4h', '1d'
+    "timeframe": "1h",  # Active chart view default: '5m', '15m', '1h', '4h', '1d'
+    "scan_timeframes": ["5m", "15m", "1h", "4h"],  # Timeframes scanned by automated engine
     "lookback_candles": 500,
     "forecast_candles": 5,
     "scan_interval_minutes": 15,
@@ -161,8 +162,16 @@ class ConfigManager:
                 # Check for missing default watchlist assets (e.g. newly added Commodities & Metals)
                 existing_symbols = {item.get("symbol", "").upper() for item in merged.get("watchlist", [])}
                 missing_defaults = [item for item in DEFAULT_CONFIG["watchlist"] if item.get("symbol", "").upper() not in existing_symbols]
+                needs_save = False
                 if missing_defaults:
                     merged["watchlist"].extend(missing_defaults)
+                    needs_save = True
+                
+                if "scan_timeframes" not in merged or not merged["scan_timeframes"]:
+                    merged["scan_timeframes"] = DEFAULT_CONFIG["scan_timeframes"]
+                    needs_save = True
+
+                if needs_save:
                     self._save(merged)
                 
                 return merged
