@@ -215,14 +215,56 @@
           </div>
         </div>
 
-        <!-- SIGNAL HISTORY LOG -->
+        <!-- OUTCOME & WIN-RATE TRACKER CARD -->
+        <div class="card performance-card">
+          <div class="card-header">
+            <h3>📈 WIN-RATE & ACCURACY</h3>
+            <span class="badge" id="perfActiveCount">0 Active</span>
+          </div>
+          <div class="card-body">
+            <div class="perf-stats-grid">
+              <div class="perf-stat-box">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-val highlight" id="statWinRate">0.0%</span>
+              </div>
+              <div class="perf-stat-box">
+                <span class="stat-label">Profit Factor</span>
+                <span class="stat-val" id="statProfitFactor">1.0</span>
+              </div>
+              <div class="perf-stat-box">
+                <span class="stat-label">Record (W-L)</span>
+                <span class="stat-val" id="statRecord">0W - 0L</span>
+              </div>
+              <div class="perf-stat-box">
+                <span class="stat-label">Total R PnL</span>
+                <span class="stat-val" id="statTotalR">+0.0R</span>
+              </div>
+            </div>
+
+            <!-- Conviction Filter Slider -->
+            <div class="conviction-filter-box">
+              <div class="conv-slider-header">
+                <label for="perfConvictionFilter">Filter by Conviction:</label>
+                <span id="perfConvictionLabel">&ge; 65%</span>
+              </div>
+              <input type="range" id="perfConvictionFilter" min="50" max="95" step="5" value="65" />
+            </div>
+          </div>
+        </div>
+
+        <!-- RESOLVED TRADES & SIGNALS LOG -->
         <div class="card history-card">
           <div class="card-header">
-            <h3>⚡ RECENT SIGNALS</h3>
-            <span class="badge" id="signalCountBadge">0</span>
+            <div class="history-tab-buttons">
+              <button class="hist-tab active" id="tabRecentSignals">Signals (<span id="signalCountBadge">0</span>)</button>
+              <button class="hist-tab" id="tabResolvedTrades">Outcomes (<span id="resolvedCountBadge">0</span>)</button>
+            </div>
           </div>
           <div class="card-body scrollable-history" id="signalHistoryList">
             <div class="empty-history">No signals recorded yet. Click "Run Scan Now" to scan active watchlist.</div>
+          </div>
+          <div class="card-body scrollable-history" id="resolvedTradesList" style="display: none;">
+            <div class="empty-history">No closed trades yet. Signals will be tracked across their 5-candle duration.</div>
           </div>
         </div>
       </aside>

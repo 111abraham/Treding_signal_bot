@@ -9,9 +9,14 @@ __pycache__/
 # Local User Configurations (Contains Private Telegram Bot Token & Chat ID)
 config.json
 
+# Local Runtime Data
+trade_outcomes.json
+backend/trade_outcomes.json
+
 # System & IDE files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.log
+

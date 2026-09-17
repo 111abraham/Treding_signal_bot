@@ -15,6 +15,7 @@ from app.config import config_manager
 from app.data_fetcher import MarketDataFetcher, get_current_session_info
 from app.forecasting.chronos_engine import ai_engine, DEVICE
 from app.forecasting.signal_generator import signal_generator
+from app.forecasting.outcome_tracker import outcome_tracker
 from app.telegram_bot import telegram_notifier
 from app.scheduler import scan_engine, background_scheduler_loop
 
@@ -202,6 +203,30 @@ async def get_htf_radar():
         "count": len(htf_signals),
         "opportunities": htf_signals[:6]
     }
+
+
+@app.get("/api/performance")
+async def get_performance(min_conviction: Optional[float] = Query(None)):
+    """
+    Returns closed and active trade outcome metrics, win-rate, profit factor,
+    and performance filtered by minimum conviction %.
+    """
+    stats = outcome_tracker.get_statistics(min_conviction=min_conviction)
+    trades = outcome_tracker.get_trades_log(limit=50)
+    return {
+        "stats": stats,
+        "active_trades": trades["active"],
+        "closed_trades": trades["closed"]
+    }
+
+
+@app.post("/api/performance/evaluate")
+async def trigger_performance_evaluation(background_tasks: BackgroundTasks):
+    """Manually triggers evaluation of all active trades against recent candles."""
+    cfg = config_manager.get_all()
+    telegram_enabled = cfg.get("telegram", {}).get("enabled", False)
+    background_tasks.add_task(outcome_tracker.evaluate_active_trades, telegram_enabled)
+    return {"status": "started", "message": "Outcome evaluation running in background"}
 
 
 @app.post("/api/scan")

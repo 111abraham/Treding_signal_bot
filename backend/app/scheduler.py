@@ -7,6 +7,7 @@ from app.data_fetcher import MarketDataFetcher
 from app.forecasting.chronos_engine import ai_engine
 from app.forecasting.signal_generator import signal_generator
 from app.telegram_bot import telegram_notifier
+from app.forecasting.outcome_tracker import outcome_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class ScanEngine:
                         if signal.get("is_actionable"):
                             new_signals.append(signal)
                             self._add_to_history(signal)
+                            outcome_tracker.register_signal(signal)
                             await self._dispatch_telegram(signal, force_notify, telegram_enabled)
 
                     # 4. Multi-Timeframe Safety Net: If operating on low timeframe (5m or 15m),
@@ -93,6 +95,7 @@ class ScanEngine:
                                     sig_htf["note"] = "Macro 1h Opportunity detected while on lower timeframe"
                                     new_signals.append(sig_htf)
                                     self._add_to_history(sig_htf)
+                                    outcome_tracker.register_signal(sig_htf)
                                     await self._dispatch_telegram(sig_htf, force_notify, telegram_enabled)
                         except Exception as e_htf:
                             logger.debug(f"HTF check skipped for {sym}: {e_htf}")
@@ -156,12 +159,21 @@ scan_engine = ScanEngine()
 
 
 async def background_scheduler_loop():
-    """Background task running scan_all_assets at configured intervals."""
+    """Background task running scan_all_assets and tracking active trade outcomes."""
     while True:
         try:
             cfg = config_manager.get_all()
+            
+            # 1. Evaluate any open/active trades for TP1/SL/Expiration
+            try:
+                telegram_enabled = cfg.get("telegram", {}).get("enabled", False)
+                await outcome_tracker.evaluate_active_trades(notify_telegram=telegram_enabled)
+            except Exception as e_out:
+                logger.error(f"Error evaluating active trade outcomes: {e_out}")
+
+            # 2. Run automated scan if enabled
             if cfg.get("auto_scan_enabled", True):
-                interval_min = max(5, cfg.get("scan_interval_minutes", 15))
+                interval_min = max(2, cfg.get("scan_interval_minutes", 5))
                 await scan_engine.scan_all_assets()
                 await asyncio.sleep(interval_min * 60)
             else:

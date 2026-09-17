@@ -49,6 +49,20 @@ const lvlTP1 = document.getElementById("lvlTP1");
 const lvlTP2 = document.getElementById("lvlTP2");
 const lvlRR = document.getElementById("lvlRR");
 
+// Performance & Outcome DOM Elements
+const statWinRate = document.getElementById("statWinRate");
+const statProfitFactor = document.getElementById("statProfitFactor");
+const statRecord = document.getElementById("statRecord");
+const statTotalR = document.getElementById("statTotalR");
+const perfActiveCount = document.getElementById("perfActiveCount");
+const perfConvictionFilter = document.getElementById("perfConvictionFilter");
+const perfConvictionLabel = document.getElementById("perfConvictionLabel");
+const tabRecentSignals = document.getElementById("tabRecentSignals");
+const tabResolvedTrades = document.getElementById("tabResolvedTrades");
+const resolvedTradesList = document.getElementById("resolvedTradesList");
+const resolvedCountBadge = document.getElementById("resolvedCountBadge");
+let currentMinConviction = 65;
+
 // HTF Radar Elements
 const chip5m = document.getElementById("chip5m");
 const chip15m = document.getElementById("chip15m");
@@ -83,12 +97,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadStatus();
   await loadWatchlist();
   await loadSignals();
+  await loadPerformance();
   await pollHtfRadar();
   await loadChartData(currentSymbol, currentTimeframe);
 
   // Status and scanner polling
   setInterval(loadStatus, 15000);
   setInterval(loadSignals, 30000);
+  setInterval(loadPerformance, 20000);
   setInterval(pollHtfRadar, 20000);
 });
 
@@ -523,6 +539,109 @@ async function loadSignals() {
   }
 }
 
+async function loadPerformance() {
+  try {
+    const res = await fetch(`/api/performance?min_conviction=${currentMinConviction}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const stats = data.stats || {};
+    const closedTrades = data.closed_trades || [];
+    const activeTrades = data.active_trades || [];
+
+    // Update summary metrics
+    if (statWinRate) {
+      statWinRate.textContent = `${stats.win_rate_pct ?? 0}%`;
+      statWinRate.className = "stat-val highlight";
+      if (stats.win_rate_pct >= 60) {
+        statWinRate.style.color = "var(--accent-green)";
+      } else if (stats.win_rate_pct < 45 && stats.total_closed > 0) {
+        statWinRate.style.color = "var(--accent-red)";
+      } else {
+        statWinRate.style.color = "var(--accent-cyan)";
+      }
+    }
+
+    if (statProfitFactor) {
+      statProfitFactor.textContent = stats.profit_factor ?? "1.0";
+    }
+
+    if (statRecord) {
+      statRecord.textContent = `${stats.wins ?? 0}W - ${stats.losses ?? 0}L`;
+    }
+
+    if (statTotalR) {
+      const tr = stats.total_realized_r ?? 0;
+      statTotalR.textContent = (tr >= 0 ? "+" : "") + tr + "R";
+      statTotalR.style.color = tr >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+    }
+
+    if (perfActiveCount) {
+      perfActiveCount.textContent = `${stats.active_count ?? activeTrades.length} Active`;
+    }
+
+    if (resolvedCountBadge) {
+      resolvedCountBadge.textContent = closedTrades.length;
+    }
+
+    // Render resolved trades list
+    if (resolvedTradesList) {
+      if (closedTrades.length === 0) {
+        resolvedTradesList.innerHTML = `<div class="empty-history">No closed trades yet. Signals will be tracked across their 5-candle duration.</div>`;
+        return;
+      }
+
+      resolvedTradesList.innerHTML = "";
+      closedTrades.forEach((tr) => {
+        const card = document.createElement("div");
+        card.className = "signal-card-mini";
+
+        let badgeClass = "sig-badge-expired";
+        let outcomeLabel = tr.outcome || "EXPIRED";
+        let pnlClass = (tr.realized_r >= 0) ? "sig-pnl-win" : "sig-pnl-loss";
+
+        if (tr.outcome === "WIN") {
+          badgeClass = "sig-badge-win";
+          outcomeLabel = "WIN (TP1)";
+        } else if (tr.outcome === "LOSS") {
+          badgeClass = "sig-badge-loss";
+          outcomeLabel = "LOSS (SL)";
+        } else if (tr.outcome === "EXPIRED_PROFIT") {
+          badgeClass = "sig-badge-win";
+          outcomeLabel = "EXP +PNL";
+        } else if (tr.outcome === "EXPIRED_LOSS") {
+          badgeClass = "sig-badge-loss";
+          outcomeLabel = "EXP -PNL";
+        }
+
+        const pnlStr = `${tr.realized_pnl_pct >= 0 ? "+" : ""}${tr.realized_pnl_pct}% (${tr.realized_r >= 0 ? "+" : ""}${tr.realized_r}R)`;
+        const candleDuration = `Bar ${tr.hit_on_candle || tr.candles_monitored || 5}/5`;
+
+        card.innerHTML = `
+          <div class="sig-header">
+            <span class="sig-sym">${tr.symbol} <small style="color:var(--text-muted);font-weight:normal">${tr.timeframe}</small></span>
+            <span class="${badgeClass}">${outcomeLabel}</span>
+          </div>
+          <div class="sig-body">
+            <span>Entry: ${tr.entry_price} &rarr; ${tr.exit_price}</span>
+            <span class="${pnlClass}">${pnlStr}</span>
+          </div>
+          <div class="sig-time">${candleDuration} | Conv: ${tr.conviction}% | ${tr.exit_reason || tr.closed_at}</div>
+        `;
+
+        card.addEventListener("click", () => {
+          currentTimeframe = tr.timeframe || "1h";
+          timeframeSelect.value = currentTimeframe;
+          loadChartData(tr.symbol, currentTimeframe);
+        });
+
+        resolvedTradesList.appendChild(card);
+      });
+    }
+  } catch (e) {
+    console.error("Error loading performance:", e);
+  }
+}
+
 
 // 5. EVENT LISTENERS & MODALS
 function setupEventListeners() {
@@ -531,6 +650,34 @@ function setupEventListeners() {
     currentTimeframe = e.target.value;
     loadChartData(currentSymbol, currentTimeframe);
   });
+
+  // History tab toggles (Recent Signals vs Resolved Outcomes)
+  if (tabRecentSignals && tabResolvedTrades) {
+    tabRecentSignals.addEventListener("click", () => {
+      tabRecentSignals.classList.add("active");
+      tabResolvedTrades.classList.remove("active");
+      signalHistoryList.style.display = "block";
+      resolvedTradesList.style.display = "none";
+    });
+
+    tabResolvedTrades.addEventListener("click", () => {
+      tabResolvedTrades.classList.add("active");
+      tabRecentSignals.classList.remove("active");
+      signalHistoryList.style.display = "none";
+      resolvedTradesList.style.display = "block";
+    });
+  }
+
+  // Conviction filter slider
+  if (perfConvictionFilter) {
+    perfConvictionFilter.addEventListener("input", (e) => {
+      currentMinConviction = parseInt(e.target.value);
+      if (perfConvictionLabel) {
+        perfConvictionLabel.innerHTML = `&ge; ${currentMinConviction}%`;
+      }
+      loadPerformance();
+    });
+  }
 
   // HTF Radar View Setup button
   if (btnViewHtfSetup) {
