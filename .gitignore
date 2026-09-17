@@ -1,0 +1,17 @@
+# Python Virtual Environment
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local User Configurations (Contains Private Telegram Bot Token & Chat ID)
+config.json
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

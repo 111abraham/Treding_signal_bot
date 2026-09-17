@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Quant Trading Forecast Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <!-- TradingView Lightweight Charts CDN -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- TOP NAVIGATION BAR -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-info">
+          <h1>AI QUANT FORECAST TERMINAL</h1>
+          <span class="subtext">500-Candle Lookback &rarr; 5-Candle Multi-Horizon Prediction</span>
+        </div>
+      </div>
+
+      <!-- Live Session & System Metrics -->
+      <div class="session-status-bar">
+        <div class="metric-badge session-badge" id="sessionBadge">
+          <span class="pulse-dot"></span>
+          <span id="sessionText">Checking Session...</span>
+        </div>
+        <div class="metric-badge device-badge" id="deviceBadge">
+          <span class="icon">🚀</span>
+          <span id="deviceText">RTX 5080 / CUDA</span>
+        </div>
+      </div>
+
+      <!-- Control Toolbar -->
+      <div class="top-actions">
+        <div class="timeframe-selector">
+          <label>Timeframe:</label>
+          <select id="timeframeSelect">
+            <option value="5m">5m (Micro-Scalp)</option>
+            <option value="15m">15m (Scalp)</option>
+            <option value="1h" selected>1h (Intraday)</option>
+            <option value="4h">4h (Swing)</option>
+            <option value="1d">1D (Daily)</option>
+          </select>
+        </div>
+
+        <button id="btnScanNow" class="btn btn-primary">
+          <span class="btn-icon">⚡</span> Run Scan Now
+        </button>
+        <button id="btnSettings" class="btn btn-secondary">
+          <span class="btn-icon">⚙️</span> Settings & Telegram
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN TERMINAL WORKSPACE -->
+    <main class="terminal-body">
+      <!-- LEFT SIDEBAR: WATCHLIST -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>WATCHLIST</h2>
+          <button id="btnAddAsset" class="btn-sm btn-outline">+ Add</button>
+        </div>
+
+        <!-- Filter tabs -->
+        <div class="category-tabs">
+          <button class="cat-tab active" data-category="ALL">ALL</button>
+          <button class="cat-tab" data-category="Forex">Forex</button>
+          <button class="cat-tab" data-category="Indices">Indices</button>
+          <button class="cat-tab" data-category="Crypto">Crypto</button>
+          <button class="cat-tab" data-category="Stocks">Stocks</button>
+        </div>
+
+        <!-- Watchlist Items -->
+        <div class="watchlist-list" id="watchlistContainer">
+          <div class="loading-spinner">Loading watchlist...</div>
+        </div>
+
+        <!-- Scanner Progress Footer -->
+        <div class="scanner-footer">
+          <div class="scanner-status" id="scanStatusText">Status: Idle</div>
+          <div class="progress-bar-container" id="progressBarContainer" style="display:none;">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- CENTER: CHART & FORECAST DISPLAY -->
+      <section class="chart-section">
+        <div class="chart-header">
+          <div class="asset-details">
+            <div class="symbol-title">
+              <span id="activeSymbol">EURUSD</span>
+              <span class="asset-name" id="activeName">EUR/USD</span>
+              <span class="badge" id="activeCategory">Forex</span>
+            </div>
+            <div class="live-price-box">
+              <span class="label">CURRENT</span>
+              <span class="value" id="currentPriceDisplay">--</span>
+            </div>
+          </div>
+
+          <div class="forecast-summary-pills">
+            <div class="summary-pill" id="directionPill">
+              <span class="pill-label">5-Candle Direction</span>
+              <span class="pill-val" id="directionValue">Calculating...</span>
+            </div>
+            <div class="summary-pill" id="targetPill">
+              <span class="pill-label">Expected Return</span>
+              <span class="pill-val" id="expectedReturnValue">--</span>
+            </div>
+            <div class="summary-pill" id="convictionPill">
+              <span class="pill-label">Conviction</span>
+              <span class="pill-val" id="convictionValue">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HIGHER TIMEFRAME (HTF) CONFLUENCE & OPPORTUNITY RADAR BAR -->
+        <div class="htf-radar-bar" id="htfRadarBar">
+          <div class="htf-left">
+            <span class="htf-label">🌐 HTF RADAR:</span>
+            <div class="htf-chips" id="htfChips">
+              <span class="htf-chip" id="chip5m">5m: --</span>
+              <span class="htf-chip" id="chip15m">15m: --</span>
+              <span class="htf-chip" id="chip1h">1h: --</span>
+              <span class="htf-chip" id="chip4h">4h: --</span>
+            </div>
+            <span class="htf-alignment-summary" id="htfAlignmentSummary">Analyzing HTF alignment...</span>
+          </div>
+          <div class="htf-right" id="htfOpportunityAlert" style="display: none;">
+            <span class="htf-pulse">🔥</span>
+            <span id="htfAlertText">HTF 1h Opportunity detected</span>
+            <button class="btn-sm btn-primary" id="btnViewHtfSetup">View Setup</button>
+          </div>
+        </div>
+
+        <!-- CHART CONTAINER -->
+        <div class="chart-canvas-wrapper">
+          <div id="tradingviewChart" class="chart-canvas"></div>
+          <div id="chartLoadingOverlay" class="chart-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <span>Generating 500-bar lookback & 5-candle AI forecast...</span>
+          </div>
+        </div>
+
+        <!-- CHART LEGEND & CONTROLS -->
+        <div class="chart-footer-legend">
+          <div class="legend-item"><span class="legend-color historical-candle"></span> 500 Historical Candles</div>
+          <div class="legend-item"><span class="legend-color predicted-candle"></span> 5 AI Predicted Candles (Median)</div>
+          <div class="legend-item"><span class="legend-color confidence-ribbon"></span> 10% - 90% Quantile Bounds</div>
+          <div class="legend-item"><span class="legend-color sl-line"></span> Stop-Loss (Dynamic ATR)</div>
+          <div class="legend-item"><span class="legend-color tp-line"></span> Take-Profit 1 & 2</div>
+        </div>
+      </section>
+
+      <!-- RIGHT SIDEBAR: SIGNAL METRICS & GUARDRAILS -->
+      <aside class="signal-sidebar">
+        <!-- SPREAD & SL GUARDRAIL CARD -->
+        <div class="card guardrail-card">
+          <div class="card-header">
+            <h3>🛡️ RISK & SPREAD GUARDRAILS</h3>
+          </div>
+          <div class="card-body">
+            <div class="guardrail-rule">
+              <span class="rule-title">Spread vs. Stop-Loss Ratio</span>
+              <span class="rule-threshold">Rule: Must be &lt; 5.0%</span>
+            </div>
+            <div class="guardrail-meter-box">
+              <div class="guardrail-meter-bar">
+                <div class="meter-fill" id="spreadMeterFill" style="width: 25%;"></div>
+                <div class="meter-marker" style="left: 50%;" title="5% Max Limit"></div>
+              </div>
+              <div class="meter-labels">
+                <span id="currentSpreadRatio">0.0%</span>
+                <span class="limit-label">Limit: 5%</span>
+              </div>
+            </div>
+            <div class="guardrail-status-pill" id="spreadStatusPill">
+              <span>Checking spread...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- EXECUTION CARD -->
+        <div class="card execution-card">
+          <div class="card-header">
+            <h3>🎯 TRADE SETUP LEVELS</h3>
+          </div>
+          <div class="card-body" id="executionLevelsBody">
+            <div class="level-row">
+              <span class="lvl-label">Entry Price</span>
+              <span class="lvl-val" id="lvlEntry">--</span>
+            </div>
+            <div class="level-row stop-loss-row">
+              <span class="lvl-label">Stop-Loss (SL)</span>
+              <span class="lvl-val" id="lvlSL">--</span>
+            </div>
+            <div class="level-row take-profit-row">
+              <span class="lvl-label">Take-Profit 1 (TP1)</span>
+              <span class="lvl-val" id="lvlTP1">--</span>
+            </div>
+            <div class="level-row take-profit-row">
+              <span class="lvl-label">Take-Profit 2 (TP2)</span>
+              <span class="lvl-val" id="lvlTP2">--</span>
+            </div>
+            <div class="level-row rr-row">
+              <span class="lvl-label">Risk : Reward Ratio</span>
+              <span class="lvl-val highlight" id="lvlRR">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIGNAL HISTORY LOG -->
+        <div class="card history-card">
+          <div class="card-header">
+            <h3>⚡ RECENT SIGNALS</h3>
+            <span class="badge" id="signalCountBadge">0</span>
+          </div>
+          <div class="card-body scrollable-history" id="signalHistoryList">
+            <div class="empty-history">No signals recorded yet. Click "Run Scan Now" to scan active watchlist.</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- SETTINGS & TELEGRAM MODAL -->
+    <div class="modal-backdrop" id="settingsModal" style="display: none;">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>⚙️ Terminal & Telegram Settings</h2>
+          <button class="modal-close" id="btnCloseSettings">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="settingsForm">
+            <!-- Telegram Configuration -->
+            <div class="form-section">
+              <div class="section-title">📱 Telegram Alerts Configuration</div>
+              <div class="form-group toggle-group">
+                <label for="tgEnabled">Enable Telegram Signal Dispatch</label>
+                <input type="checkbox" id="tgEnabled" />
+              </div>
+              <div class="form-group">
+                <label for="tgBotToken">Telegram Bot Token</label>
+                <input type="password" id="tgBotToken" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" />
+                <small>Create a bot with @BotFather on Telegram and paste token here.</small>
+              </div>
+              <div class="form-group">
+                <label for="tgChatId">Telegram Chat ID</label>
+                <input type="text" id="tgChatId" placeholder="@channel_name or numeric ID e.g. 123456789" />
+                <small>Your personal user ID or channel ID. Use @userinfobot to find your ID.</small>
+              </div>
+              <div class="form-group">
+                <button type="button" class="btn btn-outline" id="btnTestTelegram">
+                  ✉️ Send Test Alert to Telegram
+                </button>
+                <span class="status-msg" id="tgTestStatus"></span>
+              </div>
+            </div>
+
+            <!-- Strategy & Guardrails -->
+            <div class="form-section">
+              <div class="section-title">🛡️ Strategy Guardrails</div>
+              <div class="form-group">
+                <label for="maxSpreadRatio">Max Spread vs. SL Ratio</label>
+                <input type="number" id="maxSpreadRatio" step="0.01" min="0.01" max="0.20" value="0.05" />
+                <small>0.05 = Spread must be &lt; 5% of Stop-Loss distance.</small>
+              </div>
+              <div class="form-group">
+                <label for="minConviction">Minimum AI Conviction %</label>
+                <input type="number" id="minConviction" min="40" max="95" value="65" />
+              </div>
+              <div class="form-group">
+                <label for="scanInterval">Background Scan Interval (Minutes)</label>
+                <input type="number" id="scanInterval" min="5" max="120" value="15" />
+              </div>
+              <div class="form-group toggle-group">
+                <label for="autoScanEnabled">Enable Automated Background Scanning</label>
+                <input type="checkbox" id="autoScanEnabled" checked />
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" id="btnCancelSettings">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD ASSET MODAL -->
+    <div class="modal-backdrop" id="addAssetModal" style="display: none;">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>+ Add Asset to Watchlist</h2>
+          <button class="modal-close" id="btnCloseAddAsset">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="addAssetForm">
+            <div class="form-group">
+              <label for="assetSymbol">Symbol Ticker</label>
+              <input type="text" id="assetSymbol" placeholder="e.g. BTC-USD, GC=F, ^GSPC, NVDA" required />
+            </div>
+            <div class="form-group">
+              <label for="assetName">Display Name</label>
+              <input type="text" id="assetName" placeholder="e.g. Bitcoin, Gold Futures, S&P 500" required />
+            </div>
+            <div class="form-group">
+              <label for="assetCategory">Category</label>
+              <select id="assetCategory">
+                <option value="Gold">Gold & Metals</option>
+                <option value="Crypto">Crypto</option>
+                <option value="Indices">Indices</option>
+                <option value="Commodities">Commodities</option>
+                <option value="Equities">Equities</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="assetSpread">Estimated Spread %</label>
+              <input type="number" id="assetSpread" step="0.005" min="0.001" max="1.0" value="0.02" />
+              <small>Used for the &lt; 5% spread-to-SL guardrail calculation.</small>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" id="btnCancelAddAsset">Cancel</button>
+              <button type="submit" class="btn btn-primary">Add Asset</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
