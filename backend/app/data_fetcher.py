@@ -130,7 +130,6 @@ class MarketDataFetcher:
         "UKOUSD": "BZ=F",
         "BRENT": "BZ=F",
         # Stocks
-        "SPCX": "SPCE",
         "MBG": "MBG.DE",
         "BAYN": "BAYN.DE",
         "MC": "MC.PA",

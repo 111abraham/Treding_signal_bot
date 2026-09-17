@@ -230,6 +230,13 @@ async def trigger_performance_evaluation(background_tasks: BackgroundTasks):
     return {"status": "started", "message": "Outcome evaluation running in background"}
 
 
+@app.post("/api/performance/reset")
+async def reset_performance():
+    """Clears the trade outcome history and statistics ledger."""
+    outcome_tracker.clear_history()
+    return {"status": "success", "message": "Outcome tracking history reset successfully"}
+
+
 @app.post("/api/scan")
 async def trigger_scan(background_tasks: BackgroundTasks):
     """Manually triggers an immediate scan of all active watchlist assets."""

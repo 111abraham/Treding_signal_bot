@@ -130,7 +130,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         {"symbol": "INTC", "name": "Intel Corp.", "category": "Stocks", "active": True, "est_spread_pct": 0.020},
         {"symbol": "NKE", "name": "Nike Inc.", "category": "Stocks", "active": True, "est_spread_pct": 0.020},
         {"symbol": "KO", "name": "Coca-Cola Co.", "category": "Stocks", "active": True, "est_spread_pct": 0.015},
-        {"symbol": "SPCX", "name": "Virgin Galactic", "category": "Stocks", "active": True, "est_spread_pct": 0.040},
+        {"symbol": "SPCX", "name": "SpaceX", "category": "Stocks", "active": False, "est_spread_pct": 0.040},
         {"symbol": "MBG", "name": "Mercedes-Benz Group", "category": "Stocks", "active": True, "est_spread_pct": 0.025},
         {"symbol": "BAYN", "name": "Bayer AG", "category": "Stocks", "active": True, "est_spread_pct": 0.025},
         {"symbol": "MC", "name": "LVMH", "category": "Stocks", "active": True, "est_spread_pct": 0.020},

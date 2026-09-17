@@ -132,11 +132,19 @@ class SignalGenerator:
             rr_ratio >= strategy_config.get("min_risk_reward", 1.5)
         )
 
+        candle_time_str = str(df["Time"].iloc[-1])
+        try:
+            candle_unix = int(pd.to_datetime(df["Time"].iloc[-1]).timestamp())
+        except Exception:
+            candle_unix = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+
         return {
             "symbol": symbol,
             "name": name,
             "category": category,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "candle_time": candle_time_str,
+            "candle_unix": candle_unix,
             "timeframe": forecast_result.get("timeframe", "1h"),
             "direction": direction,
             "current_price": current_price,

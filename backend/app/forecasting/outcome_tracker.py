@@ -52,8 +52,18 @@ class OutcomeTracker:
 
     def register_signal(self, signal: Dict[str, Any]) -> bool:
         """Adds a newly dispatched actionable signal to active tracking ledger."""
-        trade_id = f"{signal['symbol']}_{signal.get('timeframe', '1h')}_{signal['direction']}_{signal['timestamp']}"
-        
+        tf = signal.get("timeframe", "1h")
+        sym = signal["symbol"]
+
+        # Prevent duplicate active trade on the same symbol and timeframe
+        for t in self.active_trades:
+            if t["symbol"] == sym and t["timeframe"] == tf:
+                return False
+
+        candle_time = signal.get("candle_time") or signal["timestamp"]
+        candle_unix = signal.get("candle_unix") or int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+        trade_id = f"{sym}_{tf}_{signal['direction']}_{candle_time}"
+
         # Check if already tracked
         for t in self.active_trades:
             if t["id"] == trade_id:
@@ -61,10 +71,10 @@ class OutcomeTracker:
 
         trade_entry = {
             "id": trade_id,
-            "symbol": signal["symbol"],
-            "name": signal.get("name", signal["symbol"]),
+            "symbol": sym,
+            "name": signal.get("name", sym),
             "category": signal.get("category", "General"),
-            "timeframe": signal.get("timeframe", "1h"),
+            "timeframe": tf,
             "direction": signal["direction"],
             "entry_price": float(signal["entry_price"]),
             "stop_loss": float(signal["stop_loss"]),
@@ -76,6 +86,8 @@ class OutcomeTracker:
             "tp_distance": float(signal.get("tp_distance", 0.0)),
             "session_name": signal.get("session_name", "Market Session"),
             "opened_at": signal["timestamp"],
+            "opened_candle_time": candle_time,
+            "entry_candle_unix": candle_unix,
             "opened_unix": int(datetime.datetime.now(datetime.timezone.utc).timestamp()),
             "candles_monitored": 0,
             "max_favorable_price": float(signal["entry_price"]),
@@ -92,6 +104,7 @@ class OutcomeTracker:
         """
         Polls market data for each active trade and checks whether TP1 or SL was touched,
         or if 5 candles have passed (time expiration).
+        Evaluates ONLY candles formed strictly after trade entry candle.
         """
         if not self.active_trades:
             return []
@@ -106,7 +119,7 @@ class OutcomeTracker:
             entry = trade["entry_price"]
             sl = trade["stop_loss"]
             tp1 = trade["take_profit_1"]
-            opened_unix = trade["opened_unix"]
+            entry_unix = trade.get("entry_candle_unix") or trade.get("opened_unix", 0)
 
             try:
                 # Fetch recent candles to evaluate price progression since trade opening
@@ -115,11 +128,12 @@ class OutcomeTracker:
                     remaining_active.append(trade)
                     continue
 
-                # Filter candles that occurred at or after trade entry
+                # Filter candles that occurred STRICTLY AFTER trade entry candle
                 df["unix"] = pd.to_datetime(df["Time"]).apply(lambda x: int(x.timestamp()))
-                sub_df = df[df["unix"] >= opened_unix - 60].copy().reset_index(drop=True)
+                sub_df = df[df["unix"] > entry_unix].copy().reset_index(drop=True)
 
                 if sub_df.empty:
+                    # Still waiting for the first new candle to close after entry
                     remaining_active.append(trade)
                     continue
 
@@ -137,6 +151,7 @@ class OutcomeTracker:
                     high = float(row["High"])
                     low = float(row["Low"])
                     c = float(row["Close"])
+                    bar_num = idx + 1
 
                     if direction == "BULLISH":
                         # Track best and worst prices
@@ -148,14 +163,14 @@ class OutcomeTracker:
                             outcome = "WIN"
                             resolved_price = tp1
                             exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
-                            hit_candle_idx = idx + 1
+                            hit_candle_idx = bar_num
                             break
                         # Did it hit Stop-Loss?
                         elif low <= sl:
                             outcome = "LOSS"
                             resolved_price = sl
                             exit_reason = f"Stop-Loss hit at {sl:.4f}"
-                            hit_candle_idx = idx + 1
+                            hit_candle_idx = bar_num
                             break
 
                     else:  # BEARISH
@@ -166,18 +181,18 @@ class OutcomeTracker:
                             outcome = "WIN"
                             resolved_price = tp1
                             exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
-                            hit_candle_idx = idx + 1
+                            hit_candle_idx = bar_num
                             break
                         elif high >= sl:
                             outcome = "LOSS"
                             resolved_price = sl
                             exit_reason = f"Stop-Loss hit at {sl:.4f}"
-                            hit_candle_idx = idx + 1
+                            hit_candle_idx = bar_num
                             break
 
                 # If neither TP nor SL touched, check if 5 candles have passed (Time Expiration)
                 if outcome is None and candles_elapsed >= 5:
-                    last_close = float(sub_df["Close"].iloc[-1])
+                    last_close = float(sub_df["Close"].iloc[4] if len(sub_df) >= 5 else sub_df["Close"].iloc[-1])
                     resolved_price = last_close
                     hit_candle_idx = 5
 
@@ -328,6 +343,13 @@ class OutcomeTracker:
             "closed": self.closed_trades[:limit],
             "stats": self.get_statistics()
         }
+
+    def clear_history(self):
+        """Clears active and closed trades ledger."""
+        self.active_trades = []
+        self.closed_trades = []
+        self._save()
+        logger.info("Trade outcomes history cleared.")
 
 
 # Global singleton
