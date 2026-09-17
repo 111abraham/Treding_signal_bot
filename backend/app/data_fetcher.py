@@ -117,6 +117,18 @@ class MarketDataFetcher:
         "XLMUSD": "XLM-USD",
         "LNKUSD": "LINK-USD",
         "XMRUSD": "XMR-USD",
+        # Commodities & Metals (FundedNext)
+        "XAUUSD": "GC=F",
+        "GOLD": "GC=F",
+        "XAGUSD": "SI=F",
+        "SILVER": "SI=F",
+        "XPTUSD": "PL=F",
+        "PLATINUM": "PL=F",
+        "USOUSD": "CL=F",
+        "OIL": "CL=F",
+        "WTI": "CL=F",
+        "UKOUSD": "BZ=F",
+        "BRENT": "BZ=F",
         # Stocks
         "SPCX": "SPCE",
         "MBG": "MBG.DE",

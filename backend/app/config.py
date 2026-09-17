@@ -97,6 +97,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         {"symbol": "NTH25", "name": "Netherlands 25", "category": "Indices", "active": True, "est_spread_pct": 0.020},
         {"symbol": "ESP35", "name": "Spain 35 (IBEX)", "category": "Indices", "active": True, "est_spread_pct": 0.025},
         
+        # Commodities & Metals (5)
+        {"symbol": "XAUUSD", "name": "Gold vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.012},
+        {"symbol": "XAGUSD", "name": "Silver vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.015},
+        {"symbol": "XPTUSD", "name": "Platinum vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.020},
+        {"symbol": "USOUSD", "name": "WTI Crude Oil", "category": "Commodities", "active": True, "est_spread_pct": 0.018},
+        {"symbol": "UKOUSD", "name": "Brent Crude Oil", "category": "Commodities", "active": True, "est_spread_pct": 0.018},
+        
         # Crypto (9)
         {"symbol": "BTCUSD", "name": "Bitcoin", "category": "Crypto", "active": True, "est_spread_pct": 0.020},
         {"symbol": "ETHUSD", "name": "Ethereum", "category": "Crypto", "active": True, "est_spread_pct": 0.025},
@@ -150,6 +157,14 @@ class ConfigManager:
                 # Merge defaults for any missing keys
                 merged = DEFAULT_CONFIG.copy()
                 merged.update(data)
+                
+                # Check for missing default watchlist assets (e.g. newly added Commodities & Metals)
+                existing_symbols = {item.get("symbol", "").upper() for item in merged.get("watchlist", [])}
+                missing_defaults = [item for item in DEFAULT_CONFIG["watchlist"] if item.get("symbol", "").upper() not in existing_symbols]
+                if missing_defaults:
+                    merged["watchlist"].extend(missing_defaults)
+                    self._save(merged)
+                
                 return merged
         except Exception as e:
             print(f"Warning: Error loading {self.config_path}, falling back to defaults: {e}")
