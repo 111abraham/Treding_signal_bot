@@ -68,6 +68,12 @@ class TimesFMArbiter:
                 self.repo_id,
                 torch_compile=False
             )
+            # Ensure model and internal device are safely pinned to self.device (e.g. CPU)
+            target_device = torch.device(self.device)
+            if hasattr(model, "model"):
+                model.model.device = target_device
+                model.model.to(target_device)
+
             # Compile with horizon 5, max context 512
             forecast_config = timesfm.ForecastConfig(
                 max_context=512,
