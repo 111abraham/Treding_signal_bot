@@ -8,6 +8,7 @@ from app.forecasting.chronos_engine import ai_engine
 from app.forecasting.signal_generator import signal_generator
 from app.telegram_bot import telegram_notifier
 from app.forecasting.outcome_tracker import outcome_tracker
+from app.forecasting.timesfm_arbiter import timesfm_arbiter
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class ScanEngine:
         telegram_cfg = cfg.get("telegram", {})
         telegram_enabled = telegram_cfg.get("enabled", False)
         strat_cfg = cfg.get("strategy", {})
+        timesfm_cfg = cfg.get("timesfm", {})
 
         # Sync telegram credentials
         telegram_notifier.update_credentials(
@@ -93,11 +95,21 @@ class ScanEngine:
                             results.append(signal)
 
                             if signal.get("is_actionable"):
-                                new_signals.append(signal)
-                                self._add_to_history(signal)
-                                outcome_tracker.register_signal(signal)
-                                await self._dispatch_telegram(signal, force_notify, telegram_enabled)
-                                return signal
+                                # 4. Candidate Arbiter (Google TimesFM 2.5 Cross-Validation)
+                                if timesfm_cfg.get("enabled", True):
+                                    signal = await asyncio.to_thread(
+                                        timesfm_arbiter.evaluate_candidate,
+                                        df["Close"].values,
+                                        signal,
+                                        timesfm_cfg
+                                    )
+
+                                if signal.get("is_actionable"):
+                                    new_signals.append(signal)
+                                    self._add_to_history(signal)
+                                    outcome_tracker.register_signal(signal)
+                                    await self._dispatch_telegram(signal, force_notify, telegram_enabled)
+                                    return signal
                     except Exception as ex:
                         logger.error(f"Error scanning {sym} on {tf}: {ex}")
                     finally:
@@ -180,6 +192,10 @@ scan_engine = ScanEngine()
 
 async def background_scheduler_loop():
     """Background task running scan_all_assets and tracking active trade outcomes."""
+    # Start TimesFM background weight loading if enabled
+    if config_manager.get("timesfm", {}).get("enabled", True):
+        timesfm_arbiter.start_background_load()
+
     # Grace delay on boot: lets uvicorn bind socket and open dashboard instantaneously
     await asyncio.sleep(8)
 

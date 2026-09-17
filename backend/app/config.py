@@ -31,6 +31,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "notify_on_all_scans": False,
         "notify_only_high_conviction": True
     },
+    "timesfm": {
+        "enabled": True,
+        "min_candidate_conviction": 65.0,
+        "conviction_boost": 12.0,
+        "suppress_on_conflict": False,
+        "device": "cpu"
+    },
     "watchlist": [
         # Forex (48)
         {"symbol": "EURUSD", "name": "EUR/USD", "category": "Forex", "active": True, "est_spread_pct": 0.008},
@@ -171,6 +178,10 @@ class ConfigManager:
                     merged["scan_timeframes"] = DEFAULT_CONFIG["scan_timeframes"]
                     needs_save = True
 
+                if "timesfm" not in merged or not isinstance(merged["timesfm"], dict):
+                    merged["timesfm"] = DEFAULT_CONFIG["timesfm"].copy()
+                    needs_save = True
+
                 if needs_save:
                     self._save(merged)
                 
@@ -201,6 +212,22 @@ class ConfigManager:
         self._config["telegram"]["enabled"] = enabled
         self._save(self._config)
         return self._config["telegram"]
+
+    def update_timesfm(
+        self,
+        enabled: bool,
+        min_candidate_conviction: float = 65.0,
+        conviction_boost: float = 12.0,
+        suppress_on_conflict: bool = False
+    ) -> Dict[str, Any]:
+        if "timesfm" not in self._config or not isinstance(self._config["timesfm"], dict):
+            self._config["timesfm"] = DEFAULT_CONFIG["timesfm"].copy()
+        self._config["timesfm"]["enabled"] = enabled
+        self._config["timesfm"]["min_candidate_conviction"] = float(min_candidate_conviction)
+        self._config["timesfm"]["conviction_boost"] = float(conviction_boost)
+        self._config["timesfm"]["suppress_on_conflict"] = bool(suppress_on_conflict)
+        self._save(self._config)
+        return self._config["timesfm"]
 
     def get_watchlist(self) -> List[Dict[str, Any]]:
         return self._config.get("watchlist", [])

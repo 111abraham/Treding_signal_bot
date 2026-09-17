@@ -118,6 +118,10 @@
               <span class="pill-label">Conviction</span>
               <span class="pill-val" id="convictionValue">--</span>
             </div>
+            <div class="summary-pill" id="timesfmPill" style="display:none;">
+              <span class="pill-label">TimesFM Arbiter</span>
+              <span class="pill-val" id="timesfmValue">--</span>
+            </div>
           </div>
         </div>
 
@@ -212,6 +216,10 @@
             <div class="level-row rr-row">
               <span class="lvl-label">Risk : Reward Ratio</span>
               <span class="lvl-val highlight" id="lvlRR">--</span>
+            </div>
+            <div class="level-row dual-ai-row" id="rowDualAi" style="display: none;">
+              <span class="lvl-label">Dual AI Arbiter</span>
+              <span class="lvl-val" id="lvlDualAi">🤖 Confirmed</span>
             </div>
           </div>
         </div>
@@ -342,6 +350,26 @@
               <div class="form-group toggle-group">
                 <label for="autoScanEnabled">Enable Automated Background Scanning</label>
                 <input type="checkbox" id="autoScanEnabled" checked />
+              </div>
+            </div>
+
+            <!-- Google TimesFM Foundation Model Arbiter -->
+            <div class="form-section">
+              <div class="section-title">🧠 Google TimesFM 2.5 Candidate Arbiter</div>
+              <div class="form-group toggle-group">
+                <label for="timesfmEnabled">Enable TimesFM Secondary Cross-Verification</label>
+                <input type="checkbox" id="timesfmEnabled" checked />
+              </div>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Runs Google's 200M foundation model exclusively on high-conviction setups to verify directional consensus.</small>
+              <div class="form-group toggle-group">
+                <label for="timesfmSuppressConflict">Conservative Mode (Suppress on AI Divergence)</label>
+                <input type="checkbox" id="timesfmSuppressConflict" />
+              </div>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Cancels trade alerts if TimesFM predicts the opposite direction of the primary model.</small>
+              <div class="form-group">
+                <label for="timesfmBoost">Confluence Conviction Boost (%)</label>
+                <input type="number" id="timesfmBoost" min="5" max="25" value="12" />
+                <small>Bonus confidence % awarded when both AI models agree on 5-candle trajectory.</small>
               </div>
             </div>
 

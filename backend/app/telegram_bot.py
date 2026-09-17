@@ -73,8 +73,25 @@ class TelegramNotifier:
         spread_ratio = signal.get("spread_to_sl_ratio_pct", 0.0)
         spread_status = "✅ &lt; 5% Target Passed" if signal.get("passes_spread_filter") else "⚠️ Elevated Spread"
 
+        # TimesFM Arbiter section
+        if signal.get("dual_ai_confluence"):
+            header_str = "🤖🤖 <b>DUAL AI CONFLUENCE SIGNAL (TimesFM Confirmed)</b>\n"
+        else:
+            header_str = "⚡ <b>AI TRADE SIGNAL DETECTED</b>\n"
+
+        timesfm_line = ""
+        if signal.get("timesfm_status") == "ready":
+            consensus = signal.get("timesfm_consensus", "NEUTRAL")
+            tfm_ret = signal.get("timesfm_return_pct", 0.0)
+            if consensus == "AGREEMENT":
+                timesfm_line = f"• <b>Google TimesFM:</b> 🤖 <b>CONFIRMED ({tfm_ret:+0.2f}%)</b>\n"
+            elif consensus == "CONFLICT":
+                timesfm_line = f"• <b>Google TimesFM:</b> ⚠️ <i>Divergence ({tfm_ret:+0.2f}%)</i>\n"
+            else:
+                timesfm_line = f"• <b>Google TimesFM:</b> ⏸️ <i>Neutral ({tfm_ret:+0.2f}%)</i>\n"
+
         msg = (
-            f"⚡ <b>AI TRADE SIGNAL DETECTED</b>\n"
+            f"{header_str}"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"<b>Asset:</b> {name} (<code>{symbol}</code>)\n"
             f"<b>Category:</b> {category} | <b>Timeframe:</b> {tf}\n"
@@ -89,8 +106,9 @@ class TelegramNotifier:
             f"• <b>Spread vs SL Ratio:</b> <code>{spread_ratio}%</code> ({spread_status})\n"
             f"• <b>Session:</b> {session_str}\n"
             f"• <b>AI Conviction:</b> <b>{signal['conviction']}%</b>\n"
+            f"{timesfm_line}"
             f"• <b>Exp. 5-Candle Return:</b> <code>{signal['expected_return_pct']:+0.2f}%</code>\n"
-            f"• <b>Engine:</b> <i>{signal.get('model_used', 'Chronos AI')}</i>\n"
+            f"• <b>Engine:</b> <i>{signal.get('model_used', 'AI Quant Model')}</i>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"⏰ <i>{signal['timestamp']}</i>"
         )

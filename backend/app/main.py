@@ -18,6 +18,7 @@ from app.forecasting.signal_generator import signal_generator
 from app.forecasting.outcome_tracker import outcome_tracker
 from app.telegram_bot import telegram_notifier
 from app.scheduler import scan_engine, background_scheduler_loop
+from app.forecasting.timesfm_arbiter import timesfm_arbiter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TradingTerminal")
@@ -89,6 +90,9 @@ class StrategySettingsRequest(BaseModel):
     min_conviction: Optional[float] = None
     scan_interval_minutes: Optional[int] = None
     auto_scan_enabled: Optional[bool] = None
+    timesfm_enabled: Optional[bool] = None
+    timesfm_conviction_boost: Optional[float] = None
+    timesfm_suppress_on_conflict: Optional[bool] = None
 
 
 # Routes
@@ -111,7 +115,8 @@ async def get_system_status():
         "is_scanning": scan_engine.is_scanning,
         "scan_status_text": scan_engine.current_status,
         "last_scan_time": scan_engine.last_scan_time,
-        "timeframe": config_manager.get("timeframe", "1h")
+        "timeframe": config_manager.get("timeframe", "1h"),
+        "timesfm": timesfm_arbiter.get_status()
     }
 
 
@@ -173,6 +178,10 @@ async def get_chart_and_forecast(symbol: str, timeframe: Optional[str] = None):
 
     strat_cfg = config_manager.get("strategy", {})
     signal = signal_generator.evaluate_signal(forecast, df, asset_info, strat_cfg)
+    if signal and signal.get("is_actionable"):
+        timesfm_cfg = config_manager.get("timesfm", {})
+        if timesfm_cfg.get("enabled", True):
+            signal = timesfm_arbiter.evaluate_candidate(df["Close"].values, signal, timesfm_cfg)
 
     # 5. Compute Higher-Timeframe Confluence (so 5m users never miss HTF picture)
     htf_confluence = MarketDataFetcher.compute_htf_alignment(symbol)
@@ -282,6 +291,15 @@ async def update_strategy_settings(req: StrategySettingsRequest):
 
     updates["strategy"] = strat
     config_manager.update(updates)
+
+    if req.timesfm_enabled is not None or req.timesfm_conviction_boost is not None or req.timesfm_suppress_on_conflict is not None:
+        curr_tfm = config_manager.get("timesfm", {})
+        config_manager.update_timesfm(
+            enabled=req.timesfm_enabled if req.timesfm_enabled is not None else curr_tfm.get("enabled", True),
+            conviction_boost=req.timesfm_conviction_boost if req.timesfm_conviction_boost is not None else curr_tfm.get("conviction_boost", 12.0),
+            suppress_on_conflict=req.timesfm_suppress_on_conflict if req.timesfm_suppress_on_conflict is not None else curr_tfm.get("suppress_on_conflict", False)
+        )
+
     return {"status": "success", "config": config_manager.get_all()}
 
 

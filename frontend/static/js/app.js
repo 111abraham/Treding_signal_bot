@@ -48,6 +48,10 @@ const lvlSL = document.getElementById("lvlSL");
 const lvlTP1 = document.getElementById("lvlTP1");
 const lvlTP2 = document.getElementById("lvlTP2");
 const lvlRR = document.getElementById("lvlRR");
+const rowDualAi = document.getElementById("rowDualAi");
+const lvlDualAi = document.getElementById("lvlDualAi");
+const timesfmPill = document.getElementById("timesfmPill");
+const timesfmValue = document.getElementById("timesfmValue");
 
 // Performance & Outcome DOM Elements
 const statWinRate = document.getElementById("statWinRate");
@@ -316,6 +320,24 @@ function updateForecastPills(forecast, signal) {
 
   const conv = signal?.conviction ?? 50.0;
   convictionValue.textContent = conv + "%";
+
+  // TimesFM Arbiter Pill
+  if (timesfmPill && timesfmValue) {
+    if (signal && signal.timesfm_status === "ready") {
+      timesfmPill.style.display = "flex";
+      const tfmRet = signal.timesfm_return_pct ?? 0;
+      const tfmRetStr = (tfmRet >= 0 ? "+" : "") + tfmRet + "%";
+      if (signal.timesfm_consensus === "AGREEMENT") {
+        timesfmValue.innerHTML = `<span class="timesfm-consensus-agree">🤖 ${tfmRetStr} (Agree)</span>`;
+      } else if (signal.timesfm_consensus === "CONFLICT") {
+        timesfmValue.innerHTML = `<span class="timesfm-consensus-conflict">⚠️ ${signal.timesfm_direction} (${tfmRetStr})</span>`;
+      } else {
+        timesfmValue.innerHTML = `<span class="timesfm-consensus-neutral">⏸️ ${tfmRetStr}</span>`;
+      }
+    } else {
+      timesfmPill.style.display = "none";
+    }
+  }
 }
 
 function updateGuardrailsAndLevels(signal, currentClose) {
@@ -325,6 +347,7 @@ function updateGuardrailsAndLevels(signal, currentClose) {
     lvlTP1.textContent = "--";
     lvlTP2.textContent = "--";
     lvlRR.textContent = "--";
+    if (rowDualAi) rowDualAi.style.display = "none";
     currentSpreadRatio.textContent = "--";
     spreadMeterFill.style.width = "0%";
     spreadStatusPill.className = "guardrail-status-pill";
@@ -338,6 +361,16 @@ function updateGuardrailsAndLevels(signal, currentClose) {
   lvlTP1.textContent = formatPrice(signal.take_profit_1);
   lvlTP2.textContent = formatPrice(signal.take_profit_2);
   lvlRR.textContent = `1 : ${signal.risk_reward_ratio}`;
+
+  if (rowDualAi) {
+    if (signal.dual_ai_confluence) {
+      rowDualAi.style.display = "flex";
+      const retStr = signal.timesfm_return_pct >= 0 ? `+${signal.timesfm_return_pct}%` : `${signal.timesfm_return_pct}%`;
+      if (lvlDualAi) lvlDualAi.innerHTML = `🤖 Confirmed (${retStr})`;
+    } else {
+      rowDualAi.style.display = "none";
+    }
+  }
 
   // Draw Price Lines on Chart
   clearPriceLines();
@@ -516,10 +549,15 @@ async function loadSignals() {
       const badgeClass = sig.direction === "BULLISH" ? "sig-badge-long" : "sig-badge-short";
       const dirText = sig.direction === "BULLISH" ? "LONG" : "SHORT";
 
+      const dualBadge = sig.dual_ai_confluence ? `<span class="sig-badge-dual">🤖 DUAL AI</span>` : "";
+
       card.innerHTML = `
         <div class="sig-header">
-          <span class="sig-sym">${sig.symbol}</span>
-          <span class="${badgeClass}">${dirText} ${sig.conviction}%</span>
+          <span class="sig-sym">${sig.symbol} <small style="color:var(--text-muted);font-weight:normal">${sig.timeframe}</small></span>
+          <div>
+            <span class="${badgeClass}">${dirText} ${sig.conviction}%</span>
+            ${dualBadge}
+          </div>
         </div>
         <div class="sig-body">
           <span>Entry: ${sig.entry_price}</span>
@@ -747,6 +785,15 @@ function setupEventListeners() {
       document.querySelectorAll(".scan-tf-check").forEach((cb) => {
         cb.checked = savedTfs.includes(cb.value);
       });
+
+      // Populate TimesFM controls
+      const tfm = cfg.timesfm || {};
+      const elTfmEnabled = document.getElementById("timesfmEnabled");
+      const elTfmSuppress = document.getElementById("timesfmSuppressConflict");
+      const elTfmBoost = document.getElementById("timesfmBoost");
+      if (elTfmEnabled) elTfmEnabled.checked = tfm.enabled !== false;
+      if (elTfmSuppress) elTfmSuppress.checked = tfm.suppress_on_conflict === true;
+      if (elTfmBoost) elTfmBoost.value = tfm.conviction_boost ?? 12;
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -774,6 +821,9 @@ function setupEventListeners() {
       scan_interval_minutes: parseInt(document.getElementById("scanInterval").value),
       auto_scan_enabled: document.getElementById("autoScanEnabled").checked,
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
+      timesfm_enabled: document.getElementById("timesfmEnabled")?.checked !== false,
+      timesfm_suppress_on_conflict: document.getElementById("timesfmSuppressConflict")?.checked === true,
+      timesfm_conviction_boost: parseFloat(document.getElementById("timesfmBoost")?.value || 12),
     };
 
     await fetch("/api/settings/telegram", {
