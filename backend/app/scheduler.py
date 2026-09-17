@@ -3,7 +3,7 @@ import datetime
 import logging
 from typing import Dict, Any, List, Optional
 from app.config import config_manager
-from app.data_fetcher import MarketDataFetcher
+from app.data_fetcher import MarketDataFetcher, get_current_session_info
 from app.forecasting.chronos_engine import ai_engine
 from app.forecasting.signal_generator import signal_generator
 from app.telegram_bot import telegram_notifier
@@ -17,6 +17,7 @@ class ScanEngine:
 
     def __init__(self):
         self.is_scanning = False
+        self.is_initial_boot = True  # Guards against blasting 20+ alerts on startup
         self.last_scan_time: Optional[str] = None
         self.signal_history: List[Dict[str, Any]] = []
         self.latest_forecasts: Dict[str, Dict[str, Any]] = {}
@@ -27,6 +28,17 @@ class ScanEngine:
         """Runs a multi-timeframe scan cycle across all active watchlist assets concurrently."""
         if self.is_scanning:
             return {"status": "already_scanning", "message": "A scan is already in progress."}
+
+        # 20:00 - 23:00 UTC Rollover Guard: Suppress signals during daily broker spread expansion
+        session_info = get_current_session_info()
+        if session_info.get("is_rollover", False) and not force_notify:
+            self.current_status = "Signals suppressed: 20:00 - 23:00 UTC Rollover window (Spread risk protection active)."
+            logger.info("Scan cycle: 20:00 - 23:00 UTC market rollover window active. Automated alerts suppressed.")
+            return {
+                "status": "suppressed",
+                "message": "Market rollover window active (20:00-23:00 UTC). Signals suppressed to protect against broker spread expansion.",
+                "actionable_signals": []
+            }
 
         self.is_scanning = True
         self.current_status = "Initializing multi-timeframe scan..."
@@ -141,6 +153,12 @@ class ScanEngine:
             "1d": 43200
         }.get(tf, 3600)
 
+        # Guard against blasting 20+ alerts simultaneously upon terminal boot
+        if self.is_initial_boot and not force_notify:
+            self.alerted_cooldown[cooldown_key] = now
+            logger.info(f"Startup scan: primed alert cooldown for {sym} ({tf}) without blasting telegram.")
+            return
+
         should_send = force_notify or (
             last_alert is None or (now - last_alert).total_seconds() > cooldown_secs
         )
@@ -162,6 +180,9 @@ scan_engine = ScanEngine()
 
 async def background_scheduler_loop():
     """Background task running scan_all_assets and tracking active trade outcomes."""
+    # Grace delay on boot: lets uvicorn bind socket and open dashboard instantaneously
+    await asyncio.sleep(8)
+
     while True:
         try:
             cfg = config_manager.get_all()
@@ -177,6 +198,8 @@ async def background_scheduler_loop():
             if cfg.get("auto_scan_enabled", True):
                 interval_min = max(2, cfg.get("scan_interval_minutes", 5))
                 await scan_engine.scan_all_assets()
+                # Initial boot is complete after first cycle
+                scan_engine.is_initial_boot = False
                 await asyncio.sleep(interval_min * 60)
             else:
                 await asyncio.sleep(30)

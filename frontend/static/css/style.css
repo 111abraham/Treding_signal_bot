@@ -843,7 +843,50 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  margin-bottom: 8px;
+}
+
+.perf-breakdown-row {
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
   margin-bottom: 12px;
+}
+
+.breakdown-pill {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 2px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+}
+
+.breakdown-pill.win {
+  color: var(--accent-green);
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.breakdown-pill.exp-win {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+  background-color: rgba(56, 189, 248, 0.1);
+}
+
+.breakdown-pill.loss {
+  color: var(--accent-red);
+  border-color: rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.breakdown-pill.exp-loss {
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.3);
+  background-color: rgba(251, 146, 60, 0.1);
 }
 
 .perf-stat-box {

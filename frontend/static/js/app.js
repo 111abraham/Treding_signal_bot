@@ -583,6 +583,16 @@ async function loadPerformance() {
       resolvedCountBadge.textContent = closedTrades.length;
     }
 
+    // Update breakdown pills
+    const elTpWins = document.getElementById("breakdownTpWins");
+    const elExpWins = document.getElementById("breakdownExpWins");
+    const elSlLosses = document.getElementById("breakdownSlLosses");
+    const elExpLosses = document.getElementById("breakdownExpLosses");
+    if (elTpWins) elTpWins.textContent = `🎯 ${stats.tp_wins || 0} TP`;
+    if (elExpWins) elExpWins.textContent = `⏱️ +${stats.exp_wins || 0} Exp`;
+    if (elSlLosses) elSlLosses.textContent = `🛑 ${stats.sl_losses || 0} SL`;
+    if (elExpLosses) elExpLosses.textContent = `⏱️ -${stats.exp_losses || 0} Exp`;
+
     // Render resolved trades list
     if (resolvedTradesList) {
       if (closedTrades.length === 0) {

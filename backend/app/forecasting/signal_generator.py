@@ -125,9 +125,11 @@ class SignalGenerator:
 
         conviction = round(min(98.0, max(15.0, conviction)), 1)
         min_required_conviction = strategy_config.get("min_conviction", 65.0)
+        is_rollover = session_info.get("is_rollover", False)
 
         is_actionable = (
             passes_spread_filter and
+            not is_rollover and  # Suppress all signals during 20:00 - 23:00 UTC rollover spread expansion
             conviction >= min_required_conviction and
             rr_ratio >= strategy_config.get("min_risk_reward", 1.5)
         )
@@ -162,6 +164,7 @@ class SignalGenerator:
             "is_actionable": is_actionable,
             "session_name": session_info["active_session"],
             "is_london_ny_overlap": is_overlap,
+            "is_rollover": is_rollover,
             "expected_return_pct": expected_return_pct,
             "model_used": forecast_result.get("model_used", "AI Model")
         }

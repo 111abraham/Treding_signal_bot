@@ -316,6 +316,15 @@ class OutcomeTracker:
         losses = sum(1 for t in filtered if t.get("outcome") in ["LOSS", "EXPIRED_LOSS"])
         expired = sum(1 for t in filtered if "EXPIRED" in str(t.get("outcome")))
 
+        tp_wins = sum(1 for t in filtered if t.get("outcome") == "WIN")
+        sl_losses = sum(1 for t in filtered if t.get("outcome") == "LOSS")
+        exp_wins = sum(1 for t in filtered if t.get("outcome") == "EXPIRED_PROFIT")
+        exp_losses = sum(1 for t in filtered if t.get("outcome") == "EXPIRED_LOSS")
+        exp_breakeven = sum(1 for t in filtered if t.get("outcome") == "EXPIRED_BREAKEVEN")
+        exp_pnl_r = round(sum(t.get("realized_r", 0) for t in filtered if "EXPIRED" in str(t.get("outcome"))), 2)
+        tp_pnl_r = round(sum(t.get("realized_r", 0) for t in filtered if t.get("outcome") == "WIN"), 2)
+        sl_pnl_r = round(sum(t.get("realized_r", 0) for t in filtered if t.get("outcome") == "LOSS"), 2)
+
         gross_profit = sum(t.get("realized_r", 0) for t in filtered if t.get("realized_r", 0) > 0)
         gross_loss = abs(sum(t.get("realized_r", 0) for t in filtered if t.get("realized_r", 0) < 0))
         profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else (round(gross_profit, 2) if gross_profit > 0 else 1.0)
@@ -330,6 +339,14 @@ class OutcomeTracker:
             "wins": wins,
             "losses": losses,
             "expired": expired,
+            "tp_wins": tp_wins,
+            "sl_losses": sl_losses,
+            "exp_wins": exp_wins,
+            "exp_losses": exp_losses,
+            "exp_breakeven": exp_breakeven,
+            "exp_pnl_r": exp_pnl_r,
+            "tp_pnl_r": tp_pnl_r,
+            "sl_pnl_r": sl_pnl_r,
             "win_rate_pct": win_rate,
             "profit_factor": profit_factor,
             "avg_r": avg_r,

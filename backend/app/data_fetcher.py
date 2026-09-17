@@ -20,9 +20,12 @@ def get_current_session_info() -> Dict[str, Any]:
     is_ny = 13.0 <= hour < 21.0
     is_overlap = is_london and is_ny
     is_asian = 0.0 <= hour < 9.0
+    is_rollover = 20.0 <= hour < 23.0  # Daily Rollover Window: high spread & low liquidity
     
     session_names = []
-    if is_overlap:
+    if is_rollover:
+        session_names.append("Rollover Window (20:00-23:00 UTC - Spread Risk Suppressed)")
+    elif is_overlap:
         session_names.append("London-NY Overlap (Prime Liquidity)")
     elif is_london:
         session_names.append("London Session")
@@ -37,7 +40,8 @@ def get_current_session_info() -> Dict[str, Any]:
         "current_utc": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "active_session": " & ".join(session_names),
         "is_london_ny_overlap": is_overlap,
-        "is_high_liquidity": is_overlap or (is_london and hour >= 8.5) or (is_ny and hour <= 18.0)
+        "is_high_liquidity": is_overlap or (is_london and hour >= 8.5) or (is_ny and hour <= 18.0),
+        "is_rollover": is_rollover
     }
 
 
