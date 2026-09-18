@@ -157,34 +157,49 @@ function updateActiveSignalLifespanClock(nowSec, tfSec) {
 
   let maxBars = currentActiveSignal.max_candles || currentForecastCandles || 5;
   let elapsedBars = 0;
-  let remainingBars = maxBars;
   let secLeft = maxBars * tfSec;
 
   if (activeTrade) {
     maxBars = activeTrade.max_candles || maxBars;
-    elapsedBars = activeTrade.candles_monitored || 0;
-    remainingBars = Math.max(0, maxBars - elapsedBars);
-    const expUnix = activeTrade.expires_at_unix || ((activeTrade.entry_candle_unix || activeTrade.opened_unix) + (maxBars * tfSec));
+    const entryUnix = activeTrade.entry_candle_unix || activeTrade.opened_unix || nowSec;
+    const expUnix = activeTrade.expires_at_unix || (entryUnix + (maxBars * tfSec));
     secLeft = Math.max(0, expUnix - nowSec);
+
+    if (activeTrade.candles_monitored !== undefined && activeTrade.candles_monitored !== null) {
+      elapsedBars = activeTrade.candles_monitored;
+    } else {
+      elapsedBars = Math.floor(Math.max(0, nowSec - entryUnix) / tfSec);
+    }
+    elapsedBars = Math.min(maxBars, elapsedBars);
   } else {
     const nextBoundary = Math.ceil(nowSec / tfSec) * tfSec;
     const curCandleRemaining = Math.max(0, nextBoundary - nowSec);
     secLeft = curCandleRemaining + Math.max(0, maxBars - 1) * tfSec;
+    elapsedBars = 0;
   }
 
-  // Render Lifespan Segments
+  const isFinished = secLeft <= 0 || elapsedBars >= maxBars;
+  const currentBar = isFinished ? maxBars : Math.min(maxBars, elapsedBars + 1);
+
+  // Render Lifespan Segments (Elapsed, Current Active, Pending)
   if (lifespanSegments) {
     lifespanSegments.innerHTML = "";
     for (let i = 0; i < maxBars; i++) {
       const seg = document.createElement("span");
       seg.className = "lifespan-segment";
-      if (i < elapsedBars) {
+      if (isFinished) {
         seg.classList.add("elapsed");
-        seg.title = `Bar ${i + 1} completed`;
+        seg.title = `Bar ${i + 1} of ${maxBars} (Completed)`;
+      } else if (i < elapsedBars) {
+        seg.classList.add("elapsed");
+        seg.title = `Bar ${i + 1} of ${maxBars} (Completed)`;
+      } else if (i === elapsedBars) {
+        seg.classList.add("current");
+        if (currentBar === maxBars) seg.classList.add("danger");
+        seg.title = `Bar ${i + 1} of ${maxBars} (Active Now)`;
       } else {
-        seg.classList.add("active");
-        if (remainingBars === 1) seg.classList.add("danger");
-        seg.title = `Bar ${i + 1} remaining`;
+        seg.classList.add("pending");
+        seg.title = `Bar ${i + 1} of ${maxBars} (Upcoming)`;
       }
       lifespanSegments.appendChild(seg);
     }
@@ -192,18 +207,18 @@ function updateActiveSignalLifespanClock(nowSec, tfSec) {
 
   const durStr = formatRemainingDuration(secLeft);
   if (lvlSignalRemaining) {
-    if (activeTrade) {
-      lvlSignalRemaining.textContent = `⏳ ${remainingBars} of ${maxBars} bars left (~${durStr})`;
+    if (isFinished) {
+      lvlSignalRemaining.textContent = `⏱️ Finished (${maxBars}/${maxBars} bars)`;
     } else {
-      lvlSignalRemaining.textContent = `⏳ ${maxBars} bars horizon (~${durStr})`;
+      lvlSignalRemaining.textContent = `⏳ Bar ${currentBar} of ${maxBars} (~${durStr} left)`;
     }
   }
 
   if (lifespanPillValue) {
-    if (activeTrade) {
-      lifespanPillValue.textContent = `⏳ ${remainingBars}/${maxBars} Bars (${durStr})`;
+    if (isFinished) {
+      lifespanPillValue.textContent = `⏱️ Finished (${maxBars}/${maxBars})`;
     } else {
-      lifespanPillValue.textContent = `⏳ ${maxBars} Bars (~${durStr})`;
+      lifespanPillValue.textContent = `⏳ Bar ${currentBar}/${maxBars} (${durStr} left)`;
     }
   }
 }
@@ -260,12 +275,12 @@ function startLiveCountdownEngine() {
       const expUnix = entryUnix + maxC * step;
       const secLeft = expUnix - nowSec;
       if (secLeft <= 0) {
-        el.textContent = `⏱️ Finished (${maxC} bars)`;
+        el.textContent = `⏱️ Finished (${maxC}/${maxC})`;
         el.className = "sig-countdown completed";
       } else {
         const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
-        const remBars = Math.max(0, maxC - elapsedBars);
-        el.textContent = `⏳ ${remBars}/${maxC} bars (${formatRemainingDuration(secLeft)} left)`;
+        const currentBar = Math.min(maxC, elapsedBars + 1);
+        el.textContent = `⏳ Bar ${currentBar}/${maxC} (${formatRemainingDuration(secLeft)} left)`;
         el.className = "sig-countdown";
       }
     });
@@ -372,8 +387,15 @@ async function loadChartData(symbol, timeframe) {
   chartOverlay.style.display = "flex";
   clearPriceLines();
 
+  if (timeframe) {
+    currentTimeframe = timeframe;
+    if (timeframeSelect && timeframeSelect.value !== timeframe) {
+      timeframeSelect.value = timeframe;
+    }
+  }
+
   try {
-    const res = await fetch(`/api/chart/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+    const res = await fetch(`/api/chart/${encodeURIComponent(symbol)}?timeframe=${currentTimeframe}`);
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.detail || "Failed to load chart data");
@@ -381,6 +403,10 @@ async function loadChartData(symbol, timeframe) {
 
     const data = await res.json();
     currentSymbol = data.symbol;
+    currentTimeframe = data.timeframe || timeframe || currentTimeframe;
+    if (timeframeSelect && timeframeSelect.value !== currentTimeframe) {
+      timeframeSelect.value = currentTimeframe;
+    }
 
     // Update Header
     activeSymbolElem.textContent = data.symbol;
@@ -395,7 +421,7 @@ async function loadChartData(symbol, timeframe) {
     // Set Historical Candles (500)
     historicalSeries.setData(data.candles);
 
-    // Render 5 Predicted Future Candles
+    // Render Predicted Future Candles
     const predCandles = data.forecast.predicted_candles || [];
     if (predCandles.length > 0) {
       predictedSeries.setData(predCandles);
@@ -410,18 +436,19 @@ async function loadChartData(symbol, timeframe) {
       chart.timeScale().fitContent();
     }
 
-    currentActiveSignal = data.signal;
+    // Prioritize active trade if one exists, otherwise use fresh live forecast signal
+    currentActiveSignal = data.active_trade || data.signal;
 
     // Update Direction Pill Dynamic Horizon Label (e.g. 5-Candle Direction)
-    const maxBars = data.signal?.max_candles || data.forecast?.predicted_candles?.length || currentForecastCandles || 5;
+    const maxBars = currentActiveSignal?.max_candles || data.forecast?.predicted_candles?.length || currentForecastCandles || 5;
     const dirPillLabel = document.querySelector("#directionPill .pill-label");
     if (dirPillLabel) dirPillLabel.textContent = `${maxBars}-Candle Direction`;
 
     // Update Forecast Pills
-    updateForecastPills(data.forecast, data.signal);
+    updateForecastPills(data.forecast, currentActiveSignal);
 
     // Update Guardrails & Levels Card
-    updateGuardrailsAndLevels(data.signal, lastHistorical?.close);
+    updateGuardrailsAndLevels(currentActiveSignal, lastHistorical?.close);
 
     // Update Higher Timeframe Radar & Confluence
     updateHtfConfluence(data.htf_confluence);
@@ -770,12 +797,12 @@ async function loadSignals() {
       const expUnix = sig.expires_at_unix || (entryUnix + maxC * step);
       const secLeft = Math.max(0, expUnix - nowSec);
       const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
-      const remBars = Math.max(0, maxC - elapsedBars);
+      const currentBar = Math.min(maxC, elapsedBars + 1);
 
       const countdownHtml = showCountdownTimers
         ? (secLeft <= 0
-            ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC} bars)</span>`
-            : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ ${remBars}/${maxC} bars (${formatRemainingDuration(secLeft)} left)</span>`)
+            ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC}/${maxC})</span>`
+            : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ Bar ${currentBar}/${maxC} (${formatRemainingDuration(secLeft)} left)</span>`)
         : "";
 
       card.innerHTML = `
@@ -797,6 +824,10 @@ async function loadSignals() {
       `;
 
       card.addEventListener("click", () => {
+        currentTimeframe = sig.timeframe;
+        if (timeframeSelect) {
+          timeframeSelect.value = sig.timeframe;
+        }
         loadChartData(sig.symbol, sig.timeframe);
       });
 
@@ -894,7 +925,8 @@ async function loadPerformance() {
         }
 
         const pnlStr = `${tr.realized_pnl_pct >= 0 ? "+" : ""}${tr.realized_pnl_pct}% (${tr.realized_r >= 0 ? "+" : ""}${tr.realized_r}R)`;
-        const candleDuration = `Bar ${tr.hit_on_candle || tr.candles_monitored || 5}/5`;
+        const maxC = tr.max_candles || currentForecastCandles || 5;
+        const candleDuration = `Bar ${tr.hit_on_candle || tr.candles_monitored || maxC}/${maxC}`;
 
         card.innerHTML = `
           <div class="sig-header">

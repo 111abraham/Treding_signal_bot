@@ -229,6 +229,12 @@ async def get_chart_and_forecast(symbol: str, timeframe: Optional[str] = None):
     # 5. Compute Higher-Timeframe Confluence (so 5m users never miss HTF picture)
     htf_confluence = MarketDataFetcher.compute_htf_alignment(symbol)
 
+    # 6. Check for active trade tracking in outcome tracker
+    active_trade = next(
+        (t for t in outcome_tracker.active_trades if t["symbol"].upper() == symbol.upper() and t["timeframe"] == tf),
+        None
+    )
+
     return {
         "symbol": symbol,
         "name": asset_info.get("name", symbol),
@@ -238,6 +244,7 @@ async def get_chart_and_forecast(symbol: str, timeframe: Optional[str] = None):
         "candles": historical_candles,
         "forecast": forecast,
         "signal": signal,
+        "active_trade": active_trade,
         "htf_confluence": htf_confluence,
         "session": get_current_session_info()
     }

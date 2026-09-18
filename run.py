@@ -23,9 +23,10 @@ if __name__ == "__main__":
         cat_counts[c] = cat_counts.get(c, 0) + 1
     cat_str = ", ".join(f"{k} ({v})" for k, v in sorted(cat_counts.items()))
 
+    forecast_len = int(config_manager.get("forecast_candles", 5))
     print("=" * 65)
     print("   AI QUANT TRADING FORECAST TERMINAL")
-    print("   500 Historical Candles -> 5 Future Forecasted Candles")
+    print(f"   500 Historical Candles -> {forecast_len} Future Forecasted Candles")
     print("=" * 65)
     print(" * Web Dashboard:   http://localhost:8000")
     print(" * API Docs:        http://localhost:8000/docs")
