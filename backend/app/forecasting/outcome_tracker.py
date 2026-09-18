@@ -357,18 +357,29 @@ class OutcomeTracker:
         except Exception as e:
             logger.warning(f"Could not send resolution telegram: {e}")
 
-    def get_statistics(self, min_conviction: Optional[float] = None, timeframe: Optional[str] = None) -> Dict[str, Any]:
-        """Calculates win rate, profit factor, R-multiples, and conviction breakdown with optional timeframe filter."""
+    def get_statistics(
+        self,
+        min_conviction: Optional[float] = None,
+        timeframe: Optional[str] = None,
+        dual_ai_only: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """Calculates win rate, profit factor, R-multiples, and conviction breakdown with optional timeframe and Dual AI filters."""
         filtered = self.closed_trades
+        active = self.active_trades
+
         if min_conviction is not None:
             filtered = [t for t in filtered if t.get("conviction", 0) >= min_conviction]
+
+        if dual_ai_only:
+            filtered = [t for t in filtered if t.get("dual_ai_confluence") is True]
+            active = [t for t in active if t.get("dual_ai_confluence") is True]
 
         if timeframe and timeframe.upper() != "ALL":
             tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
             filtered = [t for t in filtered if (t.get("timeframe") or "").lower() in tf_set]
-            active_cnt = len([t for t in self.active_trades if (t.get("timeframe") or "").lower() in tf_set])
+            active_cnt = len([t for t in active if (t.get("timeframe") or "").lower() in tf_set])
         else:
-            active_cnt = len(self.active_trades)
+            active_cnt = len(active)
 
         total = len(filtered)
         if total == 0:
@@ -425,13 +436,22 @@ class OutcomeTracker:
             "total_realized_r": round(total_r, 2)
         }
 
-    def get_trades_log(self, limit: Optional[int] = 50, timeframe: Optional[str] = None) -> Dict[str, Any]:
-        """Returns active and closed trades enriched with dynamic countdown metrics with optional timeframe filter."""
+    def get_trades_log(
+        self,
+        limit: Optional[int] = 50,
+        timeframe: Optional[str] = None,
+        dual_ai_only: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """Returns active and closed trades enriched with dynamic countdown metrics with optional timeframe and Dual AI filters."""
         now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         step_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
         
         raw_active = self.active_trades
         raw_closed = self.closed_trades
+
+        if dual_ai_only:
+            raw_active = [t for t in raw_active if t.get("dual_ai_confluence") is True]
+            raw_closed = [t for t in raw_closed if t.get("dual_ai_confluence") is True]
 
         if timeframe and timeframe.upper() != "ALL":
             tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}

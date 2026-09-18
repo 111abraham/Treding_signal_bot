@@ -287,13 +287,20 @@
               <span class="breakdown-pill exp-loss" id="breakdownExpLosses" title="5-Bar Expired in Loss">⏱️ -0 Exp</span>
             </div>
 
-            <!-- Conviction Filter Slider -->
+            <!-- Conviction & Dual AI Filter Controls -->
             <div class="conviction-filter-box">
               <div class="conv-slider-header">
                 <label for="perfConvictionFilter">Filter by Conviction:</label>
                 <span id="perfConvictionLabel">&ge; 65%</span>
               </div>
               <input type="range" id="perfConvictionFilter" min="50" max="95" step="5" value="65" />
+
+              <div class="dual-ai-filter-row" style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255, 255, 255, 0.08);">
+                <label for="perfDualAiOnly" style="font-size: 11px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                  <span>🤖 Dual AI Confluence Only</span>
+                </label>
+                <input type="checkbox" id="perfDualAiOnly" title="Calculate win rate & filter outcomes exclusively for Dual AI confirmed trades" style="accent-color: #a855f7; cursor: pointer;" />
+              </div>
             </div>
           </div>
         </div>

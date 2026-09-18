@@ -99,6 +99,7 @@ const statTotalR = document.getElementById("statTotalR");
 const perfActiveCount = document.getElementById("perfActiveCount");
 const perfConvictionFilter = document.getElementById("perfConvictionFilter");
 const perfConvictionLabel = document.getElementById("perfConvictionLabel");
+const perfDualAiOnly = document.getElementById("perfDualAiOnly");
 const btnExportHistory = document.getElementById("btnExportHistory");
 const btnImportHistory = document.getElementById("btnImportHistory");
 const btnClearHistory = document.getElementById("btnClearHistory");
@@ -1101,9 +1102,13 @@ function renderSignalsList() {
   });
 
   // 2. Filter by selected timeframe(s)
-  const filtered = selectedTfs.has("ALL")
+  let filtered = selectedTfs.has("ALL")
     ? sorted
     : sorted.filter((s) => isTfSelected(s.timeframe));
+
+  if (perfDualAiOnly && perfDualAiOnly.checked) {
+    filtered = filtered.filter((s) => s.dual_ai_confluence === true);
+  }
 
   signalCountBadge.textContent = filtered.length;
 
@@ -1202,6 +1207,10 @@ function updatePerformanceDisplay() {
     filtered = filtered.filter((t) => (t.conviction ?? 0) >= currentMinConviction);
   }
   let activeFiltered = activeTradesData || [];
+  if (perfDualAiOnly && perfDualAiOnly.checked) {
+    filtered = filtered.filter((t) => t.dual_ai_confluence === true);
+    activeFiltered = activeFiltered.filter((t) => t.dual_ai_confluence === true);
+  }
   if (!selectedTfs.has("ALL")) {
     filtered = filtered.filter((t) => isTfSelected(t.timeframe));
     activeFiltered = activeFiltered.filter((t) => isTfSelected(t.timeframe));
@@ -1299,6 +1308,9 @@ function renderOutcomesList() {
     if (currentMinConviction !== null && (tr.conviction ?? 0) < currentMinConviction) {
       return false;
     }
+    if (perfDualAiOnly && perfDualAiOnly.checked && !tr.dual_ai_confluence) {
+      return false;
+    }
     return true;
   });
 
@@ -1353,6 +1365,9 @@ function renderOutcomesList() {
     const dirBadge = isBull
       ? `<span class="dir-badge bullish" style="font-size:9px;padding:1px 4px;margin-left:4px;">🟢 BUY</span>`
       : `<span class="dir-badge bearish" style="font-size:9px;padding:1px 4px;margin-left:4px;">🔴 SELL</span>`;
+    const dualBadge = tr.dual_ai_confluence
+      ? `<span class="sig-badge-dual" style="font-size:9px;padding:1px 4px;margin-left:4px;">🤖 DUAL</span>`
+      : "";
 
     const openedStr = formatUtcTimestamp(tr.opened_at || tr.opened_unix);
     const closedStr = formatUtcTimestamp(tr.closed_at || tr.closed_unix);
@@ -1363,6 +1378,7 @@ function renderOutcomesList() {
         <span class="sig-sym">
           ${tr.symbol} <small style="color:var(--text-muted);font-weight:600">${tr.timeframe}</small>
           ${dirBadge}
+          ${dualBadge}
         </span>
         <span class="${badgeClass}">${outcomeLabel}</span>
       </div>
@@ -1694,6 +1710,15 @@ function setupEventListeners() {
         perfConvictionLabel.innerHTML = `&ge; ${currentMinConviction}%`;
       }
       updatePerformanceDisplay();
+      renderOutcomesList();
+    });
+  }
+
+  // Dual AI Confluence filter checkbox
+  if (perfDualAiOnly) {
+    perfDualAiOnly.addEventListener("change", () => {
+      updatePerformanceDisplay();
+      renderSignalsList();
       renderOutcomesList();
     });
   }

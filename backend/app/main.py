@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
     except Exception as e_sync:
         logger.debug(f"MT5 auto-sync on boot skipped: {e_sync}")
 
+    # Pre-warm TimesFM 2.5 Arbiter in background thread
+    try:
+        cfg = config_manager.get_all()
+        if cfg.get("timesfm", {}).get("enabled", True):
+            logger.info("Pre-warming TimesFM 2.5 Foundation Model Arbiter...")
+            timesfm_arbiter.start_background_load()
+    except Exception as e_tfm:
+        logger.debug(f"TimesFM pre-warm skipped: {e_tfm}")
+
     scheduler_task = asyncio.create_task(background_scheduler_loop())
     yield
     scheduler_task.cancel()
@@ -279,14 +288,15 @@ class ImportHistoryRequest(BaseModel):
 async def get_performance(
     min_conviction: Optional[float] = Query(None),
     timeframe: Optional[str] = Query(None),
+    dual_ai_only: Optional[bool] = Query(None),
     limit: int = Query(100)
 ):
     """
     Returns closed and active trade outcome metrics, win-rate, profit factor,
-    and performance filtered by minimum conviction % and timeframe.
+    and performance filtered by minimum conviction %, timeframe, and Dual AI status.
     """
-    stats = outcome_tracker.get_statistics(min_conviction=min_conviction, timeframe=timeframe)
-    trades = outcome_tracker.get_trades_log(limit=limit, timeframe=timeframe)
+    stats = outcome_tracker.get_statistics(min_conviction=min_conviction, timeframe=timeframe, dual_ai_only=dual_ai_only)
+    trades = outcome_tracker.get_trades_log(limit=limit, timeframe=timeframe, dual_ai_only=dual_ai_only)
     return {
         "stats": stats,
         "active_trades": trades["active"],
