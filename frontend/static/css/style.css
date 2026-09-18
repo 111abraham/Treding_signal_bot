@@ -1035,6 +1035,81 @@ body {
   font-weight: 700;
 }
 
+/* HISTORY EXPORT & IMPORT ACTIONS */
+.perf-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hist-action-btn {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hist-action-btn:hover {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  background-color: rgba(0, 242, 254, 0.08);
+}
+
+/* ENRICHED OUTCOME CARD STYLES */
+.outcome-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin: 5px 0;
+  padding: 5px 8px;
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+
+.outcome-meta-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.outcome-meta-item .meta-label {
+  color: var(--text-muted);
+}
+
+.outcome-meta-item .meta-val {
+  font-weight: 600;
+}
+
+.outcome-timestamps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  border-top: 1px dashed var(--border-color);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.outcome-time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* OUTCOME BADGES */
 .sig-badge-win {
   background-color: rgba(16, 185, 129, 0.25);

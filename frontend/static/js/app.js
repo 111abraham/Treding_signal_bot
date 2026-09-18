@@ -82,6 +82,9 @@ const statTotalR = document.getElementById("statTotalR");
 const perfActiveCount = document.getElementById("perfActiveCount");
 const perfConvictionFilter = document.getElementById("perfConvictionFilter");
 const perfConvictionLabel = document.getElementById("perfConvictionLabel");
+const btnExportHistory = document.getElementById("btnExportHistory");
+const btnImportHistory = document.getElementById("btnImportHistory");
+const historyFileInput = document.getElementById("historyFileInput");
 const tabRecentSignals = document.getElementById("tabRecentSignals");
 const tabResolvedTrades = document.getElementById("tabResolvedTrades");
 const resolvedTradesList = document.getElementById("resolvedTradesList");
@@ -436,6 +439,33 @@ function findNearestCandleTime(targetUnix, maxDiffSec = 3600) {
   return null;
 }
 
+function frameChartToCandle(targetUnix, tf = "1h") {
+  if (!chart || !currentHistoricalCandles || currentHistoricalCandles.length === 0) return;
+  let targetIdx = -1;
+  if (targetUnix) {
+    let minDiff = Infinity;
+    for (let i = 0; i < currentHistoricalCandles.length; i++) {
+      const diff = Math.abs(currentHistoricalCandles[i].time - targetUnix);
+      if (diff < minDiff) {
+        minDiff = diff;
+        targetIdx = i;
+      }
+    }
+  } else {
+    targetIdx = currentHistoricalCandles.length - 1;
+  }
+
+  if (targetIdx !== -1) {
+    const fromIdx = Math.max(0, targetIdx - 35);
+    const toIdx = Math.min(currentHistoricalCandles.length + 15, targetIdx + 20);
+    try {
+      chart.timeScale().setVisibleLogicalRange({ from: fromIdx, to: toIdx });
+    } catch (e) {
+      console.warn("Could not set visible logical range:", e);
+    }
+  }
+}
+
 function renderChartTradeMarkers() {
   if (!historicalSeries) return;
   if (!showChartTradeMarkers) {
@@ -667,8 +697,13 @@ async function loadChartData(symbol, timeframe, pinnedSignal = null) {
       upperBandSeries.setData(upperData);
       lowerBandSeries.setData(lowerData);
 
-      // Fit content with padding
-      chart.timeScale().fitContent();
+      // Fit content or frame to pinned signal
+      if (pinnedActiveSignal) {
+        const targetUnix = pinnedActiveSignal.entry_candle_unix || pinnedActiveSignal.candle_unix || pinnedActiveSignal.opened_unix;
+        frameChartToCandle(targetUnix, currentTimeframe);
+      } else {
+        chart.timeScale().fitContent();
+      }
     }
 
     // Prioritize pinned signal (clicked card), then active trade, then fresh live signal
@@ -1104,14 +1139,16 @@ function renderSignalsList() {
       </div>
     `;
 
-    card.addEventListener("click", () => {
+    card.addEventListener("click", async () => {
       document.querySelectorAll(".signal-card-mini").forEach((c) => c.classList.remove("active-signal-card"));
       card.classList.add("active-signal-card");
       currentTimeframe = sig.timeframe;
       if (timeframeSelect) {
         timeframeSelect.value = sig.timeframe;
       }
-      loadChartData(sig.symbol, sig.timeframe, sig);
+      await loadChartData(sig.symbol, sig.timeframe, sig);
+      const targetUnix = sig.candle_unix || (sig.timestamp ? Math.floor(new Date(sig.timestamp).getTime() / 1000) : null);
+      frameChartToCandle(targetUnix, sig.timeframe);
     });
 
     signalHistoryList.appendChild(card);
@@ -1129,12 +1166,242 @@ async function loadSignals() {
   }
 }
 
+function formatUtcTimestamp(strOrUnix) {
+  if (!strOrUnix) return "--";
+  if (typeof strOrUnix === "number") {
+    const d = new Date(strOrUnix * 1000);
+    return d.toISOString().replace("T", " ").slice(5, 16) + " UTC";
+  }
+  const clean = String(strOrUnix).replace(" UTC", "");
+  return clean.length >= 16 ? clean.slice(5, 16) + " UTC" : clean;
+}
+
+function updatePerformanceDisplay(tfFilter = currentSignalTfFilter) {
+  let filtered = closedTradesData || [];
+  if (currentMinConviction !== null && currentMinConviction !== undefined) {
+    filtered = filtered.filter((t) => (t.conviction ?? 0) >= currentMinConviction);
+  }
+  let activeFiltered = activeTradesData || [];
+  if (tfFilter && tfFilter.toUpperCase() !== "ALL") {
+    filtered = filtered.filter((t) => (t.timeframe || "").toLowerCase() === tfFilter.toLowerCase());
+    activeFiltered = activeFiltered.filter((t) => (t.timeframe || "").toLowerCase() === tfFilter.toLowerCase());
+  }
+
+  const total = filtered.length;
+  let wins = 0;
+  let losses = 0;
+  let tpWins = 0;
+  let slLosses = 0;
+  let expWins = 0;
+  let expLosses = 0;
+  let grossProfit = 0;
+  let grossLoss = 0;
+  let totalR = 0;
+
+  filtered.forEach((t) => {
+    const outcome = t.outcome || "";
+    const r = Number(t.realized_r) || 0;
+    totalR += r;
+    if (r > 0) grossProfit += r;
+    if (r < 0) grossLoss += Math.abs(r);
+
+    if (outcome === "WIN" || outcome === "EXPIRED_PROFIT") {
+      wins++;
+    } else if (outcome === "LOSS" || outcome === "EXPIRED_LOSS") {
+      losses++;
+    }
+
+    if (outcome === "WIN") tpWins++;
+    else if (outcome === "LOSS") slLosses++;
+    else if (outcome === "EXPIRED_PROFIT") expWins++;
+    else if (outcome === "EXPIRED_LOSS") expLosses++;
+  });
+
+  const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) : "0.0";
+  let profitFactor = "1.0";
+  if (grossLoss > 0) {
+    profitFactor = (grossProfit / grossLoss).toFixed(2);
+  } else if (grossProfit > 0) {
+    profitFactor = grossProfit.toFixed(2);
+  }
+
+  if (statWinRate) {
+    statWinRate.textContent = `${winRate}%`;
+    const wrNum = parseFloat(winRate);
+    if (wrNum >= 60) {
+      statWinRate.style.color = "var(--accent-green)";
+    } else if (wrNum < 45 && total > 0) {
+      statWinRate.style.color = "var(--accent-red)";
+    } else {
+      statWinRate.style.color = "var(--accent-cyan)";
+    }
+  }
+
+  if (statProfitFactor) {
+    statProfitFactor.textContent = profitFactor;
+  }
+
+  if (statRecord) {
+    statRecord.textContent = `${wins}W - ${losses}L`;
+  }
+
+  if (statTotalR) {
+    const roundedR = totalR.toFixed(2);
+    statTotalR.textContent = (totalR >= 0 ? "+" : "") + roundedR + "R";
+    statTotalR.style.color = totalR >= 0 ? "var(--accent-green)" : "var(--accent-red)";
+  }
+
+  if (perfActiveCount) {
+    perfActiveCount.textContent = `${activeFiltered.length} Active`;
+  }
+
+  if (resolvedCountBadge) {
+    resolvedCountBadge.textContent = filtered.length;
+  }
+
+  const elTpWins = document.getElementById("breakdownTpWins");
+  const elExpWins = document.getElementById("breakdownExpWins");
+  const elSlLosses = document.getElementById("breakdownSlLosses");
+  const elExpLosses = document.getElementById("breakdownExpLosses");
+  if (elTpWins) elTpWins.textContent = `🎯 ${tpWins} TP`;
+  if (elExpWins) elExpWins.textContent = `⏱️ +${expWins} Exp`;
+  if (elSlLosses) elSlLosses.textContent = `🛑 ${slLosses} SL`;
+  if (elExpLosses) elExpLosses.textContent = `⏱️ -${expLosses} Exp`;
+}
+
+function renderOutcomesList() {
+  if (!resolvedTradesList) return;
+
+  const filterTf = (currentSignalTfFilter || "ALL").toLowerCase();
+  const list = (closedTradesData || []).filter((tr) => {
+    if (filterTf !== "all" && (tr.timeframe || "").toLowerCase() !== filterTf) {
+      return false;
+    }
+    if (currentMinConviction !== null && (tr.conviction ?? 0) < currentMinConviction) {
+      return false;
+    }
+    return true;
+  });
+
+  if (resolvedCountBadge) {
+    resolvedCountBadge.textContent = list.length;
+  }
+
+  if (list.length === 0) {
+    resolvedTradesList.innerHTML = `<div class="empty-history">No ${currentSignalTfFilter !== "ALL" ? currentSignalTfFilter : ""} closed trades found.</div>`;
+    return;
+  }
+
+  resolvedTradesList.innerHTML = "";
+  list.forEach((tr) => {
+    const card = document.createElement("div");
+    card.className = "signal-card-mini";
+    const tradeId = tr.id || `${tr.symbol}_${tr.timeframe}_${tr.entry_candle_unix || tr.opened_unix || ""}`;
+    card.dataset.tradeId = tradeId;
+    if (pinnedActiveSignal && (pinnedActiveSignal.id === tradeId || (pinnedActiveSignal.symbol === tr.symbol && pinnedActiveSignal.timeframe === tr.timeframe && pinnedActiveSignal.entry_price === tr.entry_price))) {
+      card.classList.add("active-signal-card");
+    }
+
+    let badgeClass = "sig-badge-expired";
+    let outcomeLabel = tr.outcome || "EXPIRED";
+    let pnlClass = (tr.realized_r >= 0) ? "sig-pnl-win" : "sig-pnl-loss";
+
+    if (tr.outcome === "WIN") {
+      badgeClass = "sig-badge-win";
+      outcomeLabel = "WIN (TP1)";
+    } else if (tr.outcome === "LOSS") {
+      badgeClass = "sig-badge-loss";
+      outcomeLabel = "LOSS (SL)";
+    } else if (tr.outcome === "EXPIRED_PROFIT") {
+      badgeClass = "sig-badge-win";
+      outcomeLabel = "EXP +PNL";
+    } else if (tr.outcome === "EXPIRED_LOSS") {
+      badgeClass = "sig-badge-loss";
+      outcomeLabel = "EXP -PNL";
+    } else if (tr.outcome === "EXPIRED_BREAKEVEN") {
+      badgeClass = "sig-badge-expired";
+      outcomeLabel = "EXP BE";
+    }
+
+    const pnlSign = (tr.realized_pnl_pct >= 0 ? "+" : "");
+    const rSign = (tr.realized_r >= 0 ? "+" : "");
+    const pnlStr = `${pnlSign}${tr.realized_pnl_pct ?? 0}% (${rSign}${tr.realized_r ?? 0}R)`;
+    const maxC = tr.max_candles || currentForecastCandles || 5;
+    const hitBar = tr.hit_on_candle || tr.candles_monitored || maxC;
+    const candleDuration = `Bar ${hitBar}/${maxC} [${tr.timeframe || "1h"}]`;
+
+    const isBull = tr.direction === "BULLISH";
+    const dirBadge = isBull
+      ? `<span class="dir-badge bullish" style="font-size:9px;padding:1px 4px;margin-left:4px;">🟢 BUY</span>`
+      : `<span class="dir-badge bearish" style="font-size:9px;padding:1px 4px;margin-left:4px;">🔴 SELL</span>`;
+
+    const openedStr = formatUtcTimestamp(tr.opened_at || tr.opened_unix);
+    const closedStr = formatUtcTimestamp(tr.closed_at || tr.closed_unix);
+    const sessionStr = tr.session_name ? tr.session_name.split(" ")[0] : "Market";
+
+    card.innerHTML = `
+      <div class="sig-header">
+        <span class="sig-sym">
+          ${tr.symbol} <small style="color:var(--text-muted);font-weight:600">${tr.timeframe}</small>
+          ${dirBadge}
+        </span>
+        <span class="${badgeClass}">${outcomeLabel}</span>
+      </div>
+
+      <div class="outcome-meta-grid">
+        <div class="outcome-meta-item">
+          <span class="meta-label">Entry &rarr; Exit</span>
+          <span class="meta-val">${formatPrice(tr.entry_price)} &rarr; ${formatPrice(tr.exit_price || tr.entry_price)}</span>
+        </div>
+        <div class="outcome-meta-item">
+          <span class="meta-label">PnL / Return</span>
+          <span class="meta-val ${pnlClass}">${pnlStr}</span>
+        </div>
+        <div class="outcome-meta-item">
+          <span class="meta-label">SL / TP</span>
+          <span class="meta-val">${formatPrice(tr.sl)} / ${formatPrice(tr.tp)}</span>
+        </div>
+        <div class="outcome-meta-item">
+          <span class="meta-label">Duration</span>
+          <span class="meta-val">${candleDuration}</span>
+        </div>
+      </div>
+
+      <div class="outcome-timestamps">
+        <div class="outcome-time-row">
+          <span>In: ${openedStr}</span>
+          <span>Out: ${closedStr}</span>
+        </div>
+        <div class="outcome-time-row" style="color: var(--text-secondary); margin-top: 2px;">
+          <span>${sessionStr} | Conv: ${tr.conviction || 0}%</span>
+          <span title="${tr.exit_reason || ''}" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${tr.exit_reason || outcomeLabel}
+          </span>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener("click", async () => {
+      document.querySelectorAll(".signal-card-mini").forEach((c) => c.classList.remove("active-signal-card"));
+      card.classList.add("active-signal-card");
+      currentTimeframe = tr.timeframe || "1h";
+      if (timeframeSelect) {
+        timeframeSelect.value = currentTimeframe;
+      }
+      await loadChartData(tr.symbol, currentTimeframe, tr);
+      const targetUnix = tr.entry_candle_unix || tr.opened_unix;
+      frameChartToCandle(targetUnix, currentTimeframe);
+    });
+
+    resolvedTradesList.appendChild(card);
+  });
+}
+
 async function loadPerformance() {
   try {
-    const res = await fetch(`/api/performance?min_conviction=${currentMinConviction}`);
+    const res = await fetch(`/api/performance?limit=200`);
     if (!res.ok) return;
     const data = await res.json();
-    const stats = data.stats || {};
     const closedTrades = data.closed_trades || [];
     const activeTrades = data.active_trades || [];
     activeTradesData = activeTrades;
@@ -1142,115 +1409,8 @@ async function loadPerformance() {
     updateActiveSignalLifespanClock();
     renderChartTradeMarkers();
 
-    // Update summary metrics
-    if (statWinRate) {
-      statWinRate.textContent = `${stats.win_rate_pct ?? 0}%`;
-      statWinRate.className = "stat-val highlight";
-      if (stats.win_rate_pct >= 60) {
-        statWinRate.style.color = "var(--accent-green)";
-      } else if (stats.win_rate_pct < 45 && stats.total_closed > 0) {
-        statWinRate.style.color = "var(--accent-red)";
-      } else {
-        statWinRate.style.color = "var(--accent-cyan)";
-      }
-    }
-
-    if (statProfitFactor) {
-      statProfitFactor.textContent = stats.profit_factor ?? "1.0";
-    }
-
-    if (statRecord) {
-      statRecord.textContent = `${stats.wins ?? 0}W - ${stats.losses ?? 0}L`;
-    }
-
-    if (statTotalR) {
-      const tr = stats.total_realized_r ?? 0;
-      statTotalR.textContent = (tr >= 0 ? "+" : "") + tr + "R";
-      statTotalR.style.color = tr >= 0 ? "var(--accent-green)" : "var(--accent-red)";
-    }
-
-    if (perfActiveCount) {
-      perfActiveCount.textContent = `${stats.active_count ?? activeTrades.length} Active`;
-    }
-
-    if (resolvedCountBadge) {
-      resolvedCountBadge.textContent = closedTrades.length;
-    }
-
-    // Update breakdown pills
-    const elTpWins = document.getElementById("breakdownTpWins");
-    const elExpWins = document.getElementById("breakdownExpWins");
-    const elSlLosses = document.getElementById("breakdownSlLosses");
-    const elExpLosses = document.getElementById("breakdownExpLosses");
-    if (elTpWins) elTpWins.textContent = `🎯 ${stats.tp_wins || 0} TP`;
-    if (elExpWins) elExpWins.textContent = `⏱️ +${stats.exp_wins || 0} Exp`;
-    if (elSlLosses) elSlLosses.textContent = `🛑 ${stats.sl_losses || 0} SL`;
-    if (elExpLosses) elExpLosses.textContent = `⏱️ -${stats.exp_losses || 0} Exp`;
-
-    // Render resolved trades list
-    if (resolvedTradesList) {
-      if (closedTrades.length === 0) {
-        resolvedTradesList.innerHTML = `<div class="empty-history">No closed trades yet. Signals will be tracked across their 5-candle duration.</div>`;
-        return;
-      }
-
-      resolvedTradesList.innerHTML = "";
-      closedTrades.forEach((tr) => {
-        const card = document.createElement("div");
-        card.className = "signal-card-mini";
-        const tradeId = tr.id || `${tr.symbol}_${tr.timeframe}_${tr.entry_candle_unix || tr.opened_unix || ""}`;
-        card.dataset.tradeId = tradeId;
-        if (pinnedActiveSignal && (pinnedActiveSignal.id === tradeId || (pinnedActiveSignal.symbol === tr.symbol && pinnedActiveSignal.timeframe === tr.timeframe && pinnedActiveSignal.entry_price === tr.entry_price))) {
-          card.classList.add("active-signal-card");
-        }
-
-        let badgeClass = "sig-badge-expired";
-        let outcomeLabel = tr.outcome || "EXPIRED";
-        let pnlClass = (tr.realized_r >= 0) ? "sig-pnl-win" : "sig-pnl-loss";
-
-        if (tr.outcome === "WIN") {
-          badgeClass = "sig-badge-win";
-          outcomeLabel = "WIN (TP1)";
-        } else if (tr.outcome === "LOSS") {
-          badgeClass = "sig-badge-loss";
-          outcomeLabel = "LOSS (SL)";
-        } else if (tr.outcome === "EXPIRED_PROFIT") {
-          badgeClass = "sig-badge-win";
-          outcomeLabel = "EXP +PNL";
-        } else if (tr.outcome === "EXPIRED_LOSS") {
-          badgeClass = "sig-badge-loss";
-          outcomeLabel = "EXP -PNL";
-        }
-
-        const pnlStr = `${tr.realized_pnl_pct >= 0 ? "+" : ""}${tr.realized_pnl_pct}% (${tr.realized_r >= 0 ? "+" : ""}${tr.realized_r}R)`;
-        const maxC = tr.max_candles || currentForecastCandles || 5;
-        const candleDuration = `Bar ${tr.hit_on_candle || tr.candles_monitored || maxC}/${maxC}`;
-
-        card.innerHTML = `
-          <div class="sig-header">
-            <span class="sig-sym">${tr.symbol} <small style="color:var(--text-muted);font-weight:normal">${tr.timeframe}</small></span>
-            <span class="${badgeClass}">${outcomeLabel}</span>
-          </div>
-          <div class="sig-body">
-            <span>Entry: ${formatPrice(tr.entry_price)} &rarr; ${formatPrice(tr.exit_price)}</span>
-            <span class="${pnlClass}">${pnlStr}</span>
-          </div>
-          <div class="sig-time">${candleDuration} | Conv: ${tr.conviction}% | ${tr.exit_reason || tr.closed_at}</div>
-        `;
-
-        card.addEventListener("click", () => {
-          document.querySelectorAll(".signal-card-mini").forEach((c) => c.classList.remove("active-signal-card"));
-          card.classList.add("active-signal-card");
-          currentTimeframe = tr.timeframe || "1h";
-          if (timeframeSelect) {
-            timeframeSelect.value = currentTimeframe;
-          }
-          loadChartData(tr.symbol, currentTimeframe, tr);
-        });
-
-        resolvedTradesList.appendChild(card);
-      });
-    }
+    updatePerformanceDisplay();
+    renderOutcomesList();
   } catch (e) {
     console.error("Error loading performance:", e);
   }
@@ -1259,6 +1419,80 @@ async function loadPerformance() {
 
 // 5. EVENT LISTENERS & MODALS
 function setupEventListeners() {
+  // History Export & Import Action Buttons
+  if (btnExportHistory) {
+    btnExportHistory.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/performance/export");
+        if (!res.ok) throw new Error("Failed to export history");
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `trade_history_export_${ts}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error("Export error:", e);
+        alert(`Failed to export trade history: ${e.message}`);
+      }
+    });
+  }
+
+  if (btnImportHistory && historyFileInput) {
+    btnImportHistory.addEventListener("click", () => {
+      historyFileInput.value = "";
+      historyFileInput.click();
+    });
+
+    historyFileInput.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const payload = JSON.parse(event.target.result);
+          if (!payload || (!payload.closed_trades && !payload.trades)) {
+            alert("Invalid trade history JSON file format. Expected 'closed_trades' list.");
+            return;
+          }
+
+          const shouldMerge = confirm(
+            `Importing trade history file: "${file.name}"\n\n` +
+            `• Click OK to MERGE with existing history (combines without losing records)\n` +
+            `• Click Cancel to REPLACE current history completely`
+          );
+
+          const res = await fetch("/api/performance/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              active_trades: payload.active_trades || [],
+              closed_trades: payload.closed_trades || payload.trades || [],
+              merge: shouldMerge
+            })
+          });
+
+          const data = await res.json();
+          if (data.status === "ok") {
+            alert(`✅ Trade history imported successfully!\n${data.message}`);
+            await loadPerformance();
+          } else {
+            alert(`Failed to import: ${data.message || "Unknown error"}`);
+          }
+        } catch (err) {
+          console.error("Import parse error:", err);
+          alert(`Error reading JSON file: ${err.message}`);
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
   // MT5 Badge Click to connect/refresh
   const mt5Badge = document.getElementById("mt5Badge");
   if (mt5Badge) {
@@ -1299,17 +1533,20 @@ function setupEventListeners() {
       tabRecentSignals.classList.remove("active");
       signalHistoryList.style.display = "none";
       resolvedTradesList.style.display = "block";
-      if (signalsTfFilterBar) signalsTfFilterBar.style.display = "none";
+      if (signalsTfFilterBar) signalsTfFilterBar.style.display = "flex";
+      renderOutcomesList();
     });
   }
 
-  // Timeframe sub-filter buttons for Signals tab
+  // Timeframe sub-filter buttons for Signals & Outcomes tabs
   document.querySelectorAll(".sig-tf-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".sig-tf-tab").forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       currentSignalTfFilter = tab.dataset.tf || "ALL";
       renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
     });
   });
 
@@ -1320,7 +1557,8 @@ function setupEventListeners() {
       if (perfConvictionLabel) {
         perfConvictionLabel.innerHTML = `&ge; ${currentMinConviction}%`;
       }
-      loadPerformance();
+      updatePerformanceDisplay();
+      renderOutcomesList();
     });
   }
 

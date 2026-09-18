@@ -1,5 +1,6 @@
 import os
 import asyncio
+import datetime
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -268,19 +269,54 @@ async def get_htf_radar():
     }
 
 
+class ImportHistoryRequest(BaseModel):
+    active_trades: Optional[List[Dict[str, Any]]] = []
+    closed_trades: Optional[List[Dict[str, Any]]] = []
+    merge: Optional[bool] = True
+
+
 @app.get("/api/performance")
-async def get_performance(min_conviction: Optional[float] = Query(None)):
+async def get_performance(
+    min_conviction: Optional[float] = Query(None),
+    timeframe: Optional[str] = Query(None),
+    limit: int = Query(100)
+):
     """
     Returns closed and active trade outcome metrics, win-rate, profit factor,
-    and performance filtered by minimum conviction %.
+    and performance filtered by minimum conviction % and timeframe.
     """
-    stats = outcome_tracker.get_statistics(min_conviction=min_conviction)
-    trades = outcome_tracker.get_trades_log(limit=50)
+    stats = outcome_tracker.get_statistics(min_conviction=min_conviction, timeframe=timeframe)
+    trades = outcome_tracker.get_trades_log(limit=limit, timeframe=timeframe)
     return {
         "stats": stats,
         "active_trades": trades["active"],
-        "closed_trades": trades["closed"]
+        "closed_trades": trades["closed"],
+        "total_closed_count": trades.get("total_closed_count", len(trades["closed"]))
     }
+
+
+@app.get("/api/performance/export")
+async def export_performance_history():
+    """Exports full trade outcome ledger as a downloadable JSON file."""
+    data = outcome_tracker.export_history()
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    headers = {
+        "Content-Disposition": f"attachment; filename=trade_history_export_{now_str}.json"
+    }
+    return JSONResponse(content=data, headers=headers)
+
+
+@app.post("/api/performance/import")
+async def import_performance_history(req: ImportHistoryRequest):
+    """Imports or merges trade history ledger from JSON."""
+    try:
+        res = outcome_tracker.import_history({
+            "active_trades": req.active_trades or [],
+            "closed_trades": req.closed_trades or []
+        }, merge=req.merge if req.merge is not None else True)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/performance/evaluate")

@@ -357,17 +357,23 @@ class OutcomeTracker:
         except Exception as e:
             logger.warning(f"Could not send resolution telegram: {e}")
 
-    def get_statistics(self, min_conviction: Optional[float] = None) -> Dict[str, Any]:
-        """Calculates win rate, profit factor, R-multiples, and conviction breakdown."""
+    def get_statistics(self, min_conviction: Optional[float] = None, timeframe: Optional[str] = None) -> Dict[str, Any]:
+        """Calculates win rate, profit factor, R-multiples, and conviction breakdown with optional timeframe filter."""
         filtered = self.closed_trades
         if min_conviction is not None:
             filtered = [t for t in filtered if t.get("conviction", 0) >= min_conviction]
+
+        if timeframe and timeframe.upper() != "ALL":
+            filtered = [t for t in filtered if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            active_cnt = len([t for t in self.active_trades if (t.get("timeframe") or "").lower() == timeframe.lower()])
+        else:
+            active_cnt = len(self.active_trades)
 
         total = len(filtered)
         if total == 0:
             return {
                 "total_closed": 0,
-                "active_count": len(self.active_trades),
+                "active_count": active_cnt,
                 "wins": 0,
                 "losses": 0,
                 "expired": 0,
@@ -400,7 +406,7 @@ class OutcomeTracker:
 
         return {
             "total_closed": total,
-            "active_count": len(self.active_trades),
+            "active_count": active_cnt,
             "wins": wins,
             "losses": losses,
             "expired": expired,
@@ -418,13 +424,20 @@ class OutcomeTracker:
             "total_realized_r": round(total_r, 2)
         }
 
-    def get_trades_log(self, limit: int = 50) -> Dict[str, Any]:
-        """Returns recent active and closed trades enriched with dynamic countdown metrics."""
+    def get_trades_log(self, limit: Optional[int] = 50, timeframe: Optional[str] = None) -> Dict[str, Any]:
+        """Returns active and closed trades enriched with dynamic countdown metrics with optional timeframe filter."""
         now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         step_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
         
+        raw_active = self.active_trades
+        raw_closed = self.closed_trades
+
+        if timeframe and timeframe.upper() != "ALL":
+            raw_active = [t for t in raw_active if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            raw_closed = [t for t in raw_closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
+
         enriched_active = []
-        for t in self.active_trades:
+        for t in raw_active:
             t_copy = dict(t)
             max_c = int(t_copy.get("max_candles", 5))
             mon = int(t_copy.get("candles_monitored", 0))
@@ -438,10 +451,71 @@ class OutcomeTracker:
             t_copy["seconds_remaining"] = max(0, exp_unix - now_ts)
             enriched_active.append(t_copy)
 
+        closed_slice = raw_closed[:limit] if (limit is not None and limit > 0) else raw_closed
+
         return {
             "active": enriched_active,
-            "closed": self.closed_trades[:limit],
-            "stats": self.get_statistics()
+            "closed": closed_slice,
+            "total_closed_count": len(raw_closed),
+            "stats": self.get_statistics(timeframe=timeframe)
+        }
+
+    def export_history(self) -> Dict[str, Any]:
+        """Exports the complete trade history database."""
+        return {
+            "version": "1.0",
+            "exported_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "total_closed": len(self.closed_trades),
+            "total_active": len(self.active_trades),
+            "active_trades": self.active_trades,
+            "closed_trades": self.closed_trades,
+            "overall_statistics": self.get_statistics()
+        }
+
+    def import_history(self, payload: Dict[str, Any], merge: bool = True) -> Dict[str, Any]:
+        """Imports trade history, sanitizes entries, deduplicates, and saves."""
+        imported_active = payload.get("active_trades", [])
+        imported_closed = payload.get("closed_trades", [])
+
+        if not isinstance(imported_active, list) or not isinstance(imported_closed, list):
+            raise ValueError("Invalid import format: active_trades and closed_trades must be arrays")
+
+        sanitized_active = [self._sanitize_trade(t) for t in imported_active]
+        sanitized_closed = [self._sanitize_trade(t) for t in imported_closed]
+
+        if merge:
+            existing_active_ids = {t["id"] for t in self.active_trades if "id" in t}
+            existing_closed_ids = {t["id"] for t in self.closed_trades if "id" in t}
+
+            new_active_count = 0
+            for t in sanitized_active:
+                if t.get("id") not in existing_active_ids:
+                    self.active_trades.append(t)
+                    if t.get("id"):
+                        existing_active_ids.add(t["id"])
+                    new_active_count += 1
+
+            new_closed_count = 0
+            for t in sanitized_closed:
+                if t.get("id") not in existing_closed_ids:
+                    self.closed_trades.append(t)
+                    if t.get("id"):
+                        existing_closed_ids.add(t["id"])
+                    new_closed_count += 1
+        else:
+            self.active_trades = sanitized_active
+            self.closed_trades = sanitized_closed
+            new_active_count = len(sanitized_active)
+            new_closed_count = len(sanitized_closed)
+
+        self._save()
+        logger.info(f"Imported trade history: {new_active_count} active, {new_closed_count} closed.")
+        return {
+            "status": "success",
+            "new_active_count": new_active_count,
+            "new_closed_count": new_closed_count,
+            "total_active": len(self.active_trades),
+            "total_closed": len(self.closed_trades)
         }
 
     def clear_history(self):

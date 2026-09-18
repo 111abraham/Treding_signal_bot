@@ -252,7 +252,12 @@
         <div class="card performance-card">
           <div class="card-header">
             <h3>📈 WIN-RATE & ACCURACY</h3>
-            <span class="badge" id="perfActiveCount">0 Active</span>
+            <div class="perf-header-actions">
+              <button class="hist-action-btn" id="btnExportHistory" title="Export trade history database to JSON">📥 Export</button>
+              <button class="hist-action-btn" id="btnImportHistory" title="Import / restore trade history from JSON">📤 Import</button>
+              <input type="file" id="historyFileInput" accept=".json" style="display: none;" />
+              <span class="badge" id="perfActiveCount">0 Active</span>
+            </div>
           </div>
           <div class="card-body">
             <div class="perf-stats-grid">
