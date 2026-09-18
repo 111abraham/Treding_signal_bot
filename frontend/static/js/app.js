@@ -22,6 +22,23 @@ let showCountdownTimers = true;
 let currentForecastCandles = 5;
 let currentActiveSignal = null;
 let currentSignalTfFilter = "ALL";
+let selectedTfs = new Set(["ALL"]);
+
+function isTfSelected(tf) {
+  if (!tf) return false;
+  if (selectedTfs.has("ALL")) return true;
+  return selectedTfs.has(tf.toLowerCase());
+}
+
+function getSelectedTfsString() {
+  if (selectedTfs.has("ALL")) return "ALL";
+  return Array.from(selectedTfs).join(",");
+}
+
+function getSelectedTfsDisplay() {
+  if (selectedTfs.has("ALL")) return "ALL";
+  return Array.from(selectedTfs).map((t) => (t.toUpperCase() === "1D" ? "1D" : t)).join(" + ");
+}
 let showChartTradeMarkers = true;
 let pinnedActiveSignal = null;
 let signalsData = [];
@@ -1083,15 +1100,15 @@ function renderSignalsList() {
     return timeB - timeA;
   });
 
-  // 2. Filter by selected timeframe sub-filter tab
-  const filtered = currentSignalTfFilter === "ALL"
+  // 2. Filter by selected timeframe(s)
+  const filtered = selectedTfs.has("ALL")
     ? sorted
-    : sorted.filter((s) => (s.timeframe || "").toLowerCase() === currentSignalTfFilter.toLowerCase());
+    : sorted.filter((s) => isTfSelected(s.timeframe));
 
   signalCountBadge.textContent = filtered.length;
 
   if (filtered.length === 0) {
-    signalHistoryList.innerHTML = `<div class="empty-history">No ${currentSignalTfFilter} signals recorded yet.</div>`;
+    signalHistoryList.innerHTML = `<div class="empty-history">No ${getSelectedTfsDisplay()} signals recorded yet.</div>`;
     return;
   }
 
@@ -1179,15 +1196,15 @@ function formatUtcTimestamp(strOrUnix) {
   return clean.length >= 16 ? clean.slice(5, 16) + " UTC" : clean;
 }
 
-function updatePerformanceDisplay(tfFilter = currentSignalTfFilter) {
+function updatePerformanceDisplay() {
   let filtered = closedTradesData || [];
   if (currentMinConviction !== null && currentMinConviction !== undefined) {
     filtered = filtered.filter((t) => (t.conviction ?? 0) >= currentMinConviction);
   }
   let activeFiltered = activeTradesData || [];
-  if (tfFilter && tfFilter.toUpperCase() !== "ALL") {
-    filtered = filtered.filter((t) => (t.timeframe || "").toLowerCase() === tfFilter.toLowerCase());
-    activeFiltered = activeFiltered.filter((t) => (t.timeframe || "").toLowerCase() === tfFilter.toLowerCase());
+  if (!selectedTfs.has("ALL")) {
+    filtered = filtered.filter((t) => isTfSelected(t.timeframe));
+    activeFiltered = activeFiltered.filter((t) => isTfSelected(t.timeframe));
   }
 
   const total = filtered.length;
@@ -1275,9 +1292,8 @@ function updatePerformanceDisplay(tfFilter = currentSignalTfFilter) {
 function renderOutcomesList() {
   if (!resolvedTradesList) return;
 
-  const filterTf = (currentSignalTfFilter || "ALL").toLowerCase();
   const list = (closedTradesData || []).filter((tr) => {
-    if (filterTf !== "all" && (tr.timeframe || "").toLowerCase() !== filterTf) {
+    if (!isTfSelected(tr.timeframe)) {
       return false;
     }
     if (currentMinConviction !== null && (tr.conviction ?? 0) < currentMinConviction) {
@@ -1291,7 +1307,7 @@ function renderOutcomesList() {
   }
 
   if (list.length === 0) {
-    resolvedTradesList.innerHTML = `<div class="empty-history">No ${currentSignalTfFilter !== "ALL" ? currentSignalTfFilter : ""} closed trades found.</div>`;
+    resolvedTradesList.innerHTML = `<div class="empty-history">No ${!selectedTfs.has("ALL") ? getSelectedTfsDisplay() : ""} closed trades found.</div>`;
     return;
   }
 
@@ -1452,7 +1468,7 @@ function setupEventListeners() {
     btnExportHistory.addEventListener("click", () => {
       if (exportModal) {
         document.querySelectorAll(".export-current-tf-label").forEach((el) => {
-          el.textContent = currentSignalTfFilter || "ALL";
+          el.textContent = getSelectedTfsDisplay();
         });
         exportModal.style.display = "flex";
       } else {
@@ -1604,12 +1620,54 @@ function setupEventListeners() {
     });
   }
 
-  // Timeframe sub-filter buttons for Signals & Outcomes tabs
+  // Timeframe sub-filter buttons for Signals & Outcomes tabs with Shift / Ctrl multi-select
   document.querySelectorAll(".sig-tf-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".sig-tf-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      currentSignalTfFilter = tab.dataset.tf || "ALL";
+    tab.addEventListener("click", (e) => {
+      const tf = (tab.dataset.tf || "ALL").toLowerCase();
+      const isMultiKey = e.shiftKey || e.ctrlKey || e.metaKey;
+
+      if (tf === "all") {
+        selectedTfs = new Set(["ALL"]);
+      } else if (isMultiKey) {
+        // Multi-select toggle mode (Shift, Ctrl, or Cmd held)
+        if (selectedTfs.has("ALL")) {
+          selectedTfs.clear();
+        }
+        if (selectedTfs.has(tf)) {
+          selectedTfs.delete(tf);
+          if (selectedTfs.size === 0) {
+            selectedTfs.add("ALL");
+          }
+        } else {
+          selectedTfs.add(tf);
+        }
+      } else {
+        // Normal click: if multiple are already selected and user clicks one of them, toggle it off
+        if (selectedTfs.size > 1 && selectedTfs.has(tf)) {
+          selectedTfs.delete(tf);
+        } else {
+          // Standard single-select switch
+          selectedTfs = new Set([tf]);
+        }
+      }
+
+      // If user ended up selecting all 5 timeframes, simplify to ALL
+      const ALL_TFS = ["5m", "15m", "1h", "4h", "1d"];
+      if (ALL_TFS.every((t) => selectedTfs.has(t))) {
+        selectedTfs = new Set(["ALL"]);
+      }
+
+      // Update active CSS classes on all tabs
+      document.querySelectorAll(".sig-tf-tab").forEach((t) => {
+        const tabTf = (t.dataset.tf || "ALL").toLowerCase();
+        if (selectedTfs.has("ALL")) {
+          t.classList.toggle("active", tabTf === "all");
+        } else {
+          t.classList.toggle("active", selectedTfs.has(tabTf));
+        }
+      });
+
+      currentSignalTfFilter = getSelectedTfsString();
       renderSignalsList();
       renderOutcomesList();
       updatePerformanceDisplay();

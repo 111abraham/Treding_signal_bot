@@ -364,8 +364,9 @@ class OutcomeTracker:
             filtered = [t for t in filtered if t.get("conviction", 0) >= min_conviction]
 
         if timeframe and timeframe.upper() != "ALL":
-            filtered = [t for t in filtered if (t.get("timeframe") or "").lower() == timeframe.lower()]
-            active_cnt = len([t for t in self.active_trades if (t.get("timeframe") or "").lower() == timeframe.lower()])
+            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
+            filtered = [t for t in filtered if (t.get("timeframe") or "").lower() in tf_set]
+            active_cnt = len([t for t in self.active_trades if (t.get("timeframe") or "").lower() in tf_set])
         else:
             active_cnt = len(self.active_trades)
 
@@ -433,8 +434,9 @@ class OutcomeTracker:
         raw_closed = self.closed_trades
 
         if timeframe and timeframe.upper() != "ALL":
-            raw_active = [t for t in raw_active if (t.get("timeframe") or "").lower() == timeframe.lower()]
-            raw_closed = [t for t in raw_closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
+            raw_active = [t for t in raw_active if (t.get("timeframe") or "").lower() in tf_set]
+            raw_closed = [t for t in raw_closed if (t.get("timeframe") or "").lower() in tf_set]
 
         enriched_active = []
         for t in raw_active:
@@ -465,8 +467,9 @@ class OutcomeTracker:
         closed = self.closed_trades
         active = self.active_trades
         if timeframe and timeframe.upper() != "ALL":
-            closed = [t for t in closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
-            active = [t for t in active if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
+            closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
+            active = [t for t in active if (t.get("timeframe") or "").lower() in tf_set]
 
         return {
             "version": "1.0",
@@ -486,7 +489,8 @@ class OutcomeTracker:
 
         closed = self.closed_trades
         if timeframe and timeframe.upper() != "ALL":
-            closed = [t for t in closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
+            closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
 
         output = io.StringIO()
         writer = csv.writer(output)
