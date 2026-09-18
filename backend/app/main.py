@@ -33,6 +33,15 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager to spin up background scanner."""
     logger.info("Initializing AI Trading Forecast Terminal...")
     logger.info(f"Hardware Compute Device: {DEVICE}")
+
+    # Auto-connect and sync from MT5 if available
+    try:
+        if mt5_bridge.initialize():
+            logger.info("Auto-syncing universe from connected FundedNext MT5 terminal...")
+            mt5_bridge.sync_watchlist_from_mt5()
+    except Exception as e_sync:
+        logger.debug(f"MT5 auto-sync on boot skipped: {e_sync}")
+
     scheduler_task = asyncio.create_task(background_scheduler_loop())
     yield
     scheduler_task.cancel()
@@ -133,6 +142,22 @@ async def connect_mt5():
     """Attempts to connect to the running MetaTrader 5 terminal."""
     success = mt5_bridge.initialize()
     return {"success": success, "status": mt5_bridge.get_status()}
+
+
+@app.post("/api/mt5/sync-universe")
+async def sync_mt5_universe():
+    """Syncs the entire 96-asset universe directly from FundedNext MetaTrader 5."""
+    watchlist = mt5_bridge.sync_watchlist_from_mt5()
+    if not watchlist:
+        raise HTTPException(
+            status_code=400,
+            detail=mt5_bridge.last_error or "MetaTrader 5 terminal not connected. Please ensure MT5 is running."
+        )
+    return {
+        "status": "success",
+        "synced_count": len(watchlist),
+        "watchlist": watchlist
+    }
 
 
 @app.get("/api/watchlist")

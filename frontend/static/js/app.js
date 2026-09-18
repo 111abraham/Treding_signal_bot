@@ -934,4 +934,29 @@ function setupEventListeners() {
       alert("Failed to add asset.");
     }
   });
+
+  // Sync MT5 Universe
+  const btnSyncMt5 = document.getElementById("btnSyncMt5");
+  if (btnSyncMt5) {
+    btnSyncMt5.addEventListener("click", async () => {
+      const originalText = btnSyncMt5.textContent;
+      btnSyncMt5.disabled = true;
+      btnSyncMt5.textContent = "Syncing...";
+      try {
+        const res = await fetch("/api/mt5/sync-universe", { method: "POST" });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`✅ Successfully synced ${data.synced_count} FundedNext symbols from MT5!`);
+          await loadWatchlist();
+        } else {
+          alert(`❌ Failed to sync: ${data.detail || "MT5 error"}`);
+        }
+      } catch (e) {
+        alert(`Error syncing MT5 universe: ${e.message}`);
+      } finally {
+        btnSyncMt5.disabled = false;
+        btnSyncMt5.textContent = originalText;
+      }
+    });
+  }
 }

@@ -164,6 +164,22 @@ class MarketDataFetcher:
         aiming for `target_count` candles (up to 500).
         Returns (DataFrame, error_message).
         """
+        # 1. Primary Source: MetaTrader 5 live connection to FundedNext
+        try:
+            from app.mt5_bridge import mt5_bridge
+            if mt5_bridge.is_connected:
+                df_mt5 = mt5_bridge.get_candles_from_mt5(symbol, timeframe=interval, count=target_count)
+                if df_mt5 is not None and len(df_mt5) >= 30:
+                    df_mt5 = compute_indicators(df_mt5)
+                    if len(df_mt5) > target_count:
+                        df_mt5 = df_mt5.iloc[-target_count:].copy().reset_index(drop=True)
+                    df_mt5.attrs["symbol"] = symbol
+                    df_mt5.attrs["source"] = "FundedNext MT5"
+                    return df_mt5, None
+        except Exception as e_mt5:
+            logger.debug(f"MT5 candle fetch failed for {symbol}, falling back to web feed: {e_mt5}")
+
+        # 2. Fallback Source: yfinance web feed
         resolved_sym = MarketDataFetcher.resolve_symbol(symbol)
         period = MarketDataFetcher.INTERVAL_PERIOD_MAP.get(interval, "60d")
         

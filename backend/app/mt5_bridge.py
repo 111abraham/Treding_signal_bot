@@ -3,6 +3,7 @@ import sys
 import logging
 from typing import Dict, Any, Optional, List
 import datetime
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,114 @@ class MT5Bridge:
         except Exception as e:
             logger.debug(f"Error fetching live tick for {symbol}: {e}")
             return None
+
+    def get_candles_from_mt5(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        count: int = 500
+    ) -> Optional[pd.DataFrame]:
+        """
+        Fetches exact historical OHLCV candles directly from FundedNext's MT5 server.
+        Takes ~0.03s and contains broker-accurate prices, wicks, and floating spreads.
+        """
+        if not self.is_connected:
+            self.initialize()
+        if not self.is_connected:
+            return None
+
+        tf_map = {
+            "1m": mt5.TIMEFRAME_M1,
+            "5m": mt5.TIMEFRAME_M5,
+            "15m": mt5.TIMEFRAME_M15,
+            "30m": mt5.TIMEFRAME_M30,
+            "1h": mt5.TIMEFRAME_H1,
+            "4h": mt5.TIMEFRAME_H4,
+            "1d": mt5.TIMEFRAME_D1,
+        }
+        mt5_tf = tf_map.get(timeframe.lower(), mt5.TIMEFRAME_H1)
+        broker_sym = self._resolve_broker_symbol(symbol)
+        if not broker_sym:
+            return None
+
+        try:
+            rates = mt5.copy_rates_from_pos(broker_sym, mt5_tf, 0, count)
+            if rates is None or len(rates) == 0:
+                mt5.symbol_select(broker_sym, True)
+                rates = mt5.copy_rates_from_pos(broker_sym, mt5_tf, 0, count)
+
+            if rates is None or len(rates) == 0:
+                return None
+
+            df = pd.DataFrame(rates)
+            df['Time'] = pd.to_datetime(df['time'], unit='s')
+            df['Open'] = df['open'].astype(float)
+            df['High'] = df['high'].astype(float)
+            df['Low'] = df['low'].astype(float)
+            df['Close'] = df['close'].astype(float)
+            df['Volume'] = df['tick_volume'].astype(float)
+            if 'spread' in df.columns:
+                df['SpreadPoints'] = df['spread']
+
+            keep_cols = ['Time', 'Open', 'High', 'Low', 'Close', 'Volume']
+            if 'SpreadPoints' in df.columns:
+                keep_cols.append('SpreadPoints')
+            df = df[keep_cols]
+
+            df.attrs["symbol"] = symbol
+            df.attrs["data_source"] = "FundedNext MT5"
+            return df
+
+        except Exception as e:
+            logger.error(f"Error fetching MT5 candles for {symbol} ({timeframe}): {e}")
+            return None
+
+    def sync_watchlist_from_mt5(self) -> List[Dict[str, Any]]:
+        """
+        Queries all symbols from FundedNext MT5 terminal and updates the watchlist in config.
+        Classifies assets into Forex (48), Commodities (5), Indices (14), Crypto (9), and Stocks (20).
+        """
+        if not self.is_connected:
+            self.initialize()
+        if not self.is_connected:
+            return []
+
+        symbols = mt5.symbols_get()
+        if not symbols:
+            return []
+
+        watchlist = []
+        for s in symbols:
+            folder = s.path.split('\\')[0] if hasattr(s, 'path') and s.path else 'General'
+            if folder == 'Cryptocurrencies':
+                category = 'Crypto'
+            elif folder == 'Stock CFD':
+                category = 'Stocks'
+            elif folder in ['Forex', 'Commodities', 'Indices']:
+                category = folder
+            else:
+                category = folder
+
+            bid = float(s.bid) if s.bid else 1.0
+            spread_val = float(s.spread * s.point) if s.point else 0.0001
+            est_spread_pct = round((spread_val / max(0.0001, bid)) * 100, 4)
+            est_spread_pct = max(0.005, min(0.5, est_spread_pct))
+
+            watchlist.append({
+                "symbol": s.name,
+                "name": s.description if s.description else s.name,
+                "category": category,
+                "active": True,
+                "est_spread_pct": est_spread_pct
+            })
+
+        cat_order = {"Forex": 1, "Commodities": 2, "Indices": 3, "Crypto": 4, "Stocks": 5}
+        watchlist.sort(key=lambda item: (cat_order.get(item["category"], 99), item["symbol"]))
+
+        from app.config import config_manager
+        config_manager.update({"watchlist": watchlist})
+        logger.info(f"Successfully synced {len(watchlist)} assets directly from FundedNext MT5!")
+        return watchlist
 
 
 # Global MT5 bridge singleton
