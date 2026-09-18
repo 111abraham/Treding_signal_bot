@@ -1064,6 +1064,12 @@ body {
   background-color: rgba(0, 242, 254, 0.08);
 }
 
+.hist-action-btn.danger-btn:hover {
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
 /* ENRICHED OUTCOME CARD STYLES */
 .outcome-meta-grid {
   display: grid;

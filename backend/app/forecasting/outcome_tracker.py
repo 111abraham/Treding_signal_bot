@@ -460,17 +460,67 @@ class OutcomeTracker:
             "stats": self.get_statistics(timeframe=timeframe)
         }
 
-    def export_history(self) -> Dict[str, Any]:
-        """Exports the complete trade history database."""
+    def export_history(self, timeframe: Optional[str] = None) -> Dict[str, Any]:
+        """Exports trade history database, with optional timeframe filtering."""
+        closed = self.closed_trades
+        active = self.active_trades
+        if timeframe and timeframe.upper() != "ALL":
+            closed = [t for t in closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
+            active = [t for t in active if (t.get("timeframe") or "").lower() == timeframe.lower()]
+
         return {
             "version": "1.0",
             "exported_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "total_closed": len(self.closed_trades),
-            "total_active": len(self.active_trades),
-            "active_trades": self.active_trades,
-            "closed_trades": self.closed_trades,
-            "overall_statistics": self.get_statistics()
+            "filter_timeframe": timeframe or "ALL",
+            "total_closed": len(closed),
+            "total_active": len(active),
+            "statistics": self.get_statistics(timeframe=timeframe),
+            "active_trades": active,
+            "closed_trades": closed
         }
+
+    def export_csv(self, timeframe: Optional[str] = None) -> str:
+        """Exports closed and active trades as a CSV string formatted for Excel / Sheets."""
+        import io
+        import csv
+
+        closed = self.closed_trades
+        if timeframe and timeframe.upper() != "ALL":
+            closed = [t for t in closed if (t.get("timeframe") or "").lower() == timeframe.lower()]
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "ID", "Symbol", "Timeframe", "Direction", "Conviction (%)",
+            "Entry Price", "Exit Price", "Stop Loss", "Take Profit 1", "Take Profit 2",
+            "Outcome", "Realized PnL (%)", "Realized R", "Duration (Bars)", "Max Candles",
+            "Opened At (UTC)", "Closed At (UTC)", "Session", "Exit Reason", "Dual AI Confluence"
+        ])
+
+        for t in closed:
+            writer.writerow([
+                t.get("id", ""),
+                t.get("symbol", ""),
+                t.get("timeframe", ""),
+                t.get("direction", ""),
+                t.get("conviction", ""),
+                t.get("entry_price", ""),
+                t.get("exit_price", ""),
+                t.get("sl", ""),
+                t.get("tp", ""),
+                t.get("tp2", ""),
+                t.get("outcome", ""),
+                t.get("realized_pnl_pct", ""),
+                t.get("realized_r", ""),
+                t.get("hit_on_candle", t.get("candles_monitored", "")),
+                t.get("max_candles", 5),
+                t.get("opened_at", ""),
+                t.get("closed_at", ""),
+                t.get("session_name", ""),
+                t.get("exit_reason", ""),
+                t.get("dual_ai_confluence", False)
+            ])
+        return output.getvalue()
 
     def import_history(self, payload: Dict[str, Any], merge: bool = True) -> Dict[str, Any]:
         """Imports trade history, sanitizes entries, deduplicates, and saves."""
@@ -518,12 +568,36 @@ class OutcomeTracker:
             "total_closed": len(self.closed_trades)
         }
 
-    def clear_history(self):
-        """Clears active and closed trades ledger."""
+    def clear_history(self, backup: bool = True) -> Dict[str, Any]:
+        """Clears active and closed trades ledger with automatic backup preservation."""
+        backup_file = None
+        if backup and self.storage_path.exists() and (self.active_trades or self.closed_trades):
+            ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+            backup_file = self.storage_path.parent / f"trade_outcomes_backup_{ts}.json"
+            try:
+                with open(backup_file, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "active_trades": self.active_trades,
+                        "closed_trades": self.closed_trades,
+                        "backed_up_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    }, f, indent=2)
+                logger.info(f"Created trade history backup: {backup_file}")
+            except Exception as e:
+                logger.warning(f"Failed to create backup before clear: {e}")
+
+        prev_closed = len(self.closed_trades)
+        prev_active = len(self.active_trades)
         self.active_trades = []
         self.closed_trades = []
         self._save()
-        logger.info("Trade outcomes history cleared.")
+        logger.info(f"Cleared {prev_closed} closed and {prev_active} active trades.")
+        return {
+            "status": "success",
+            "cleared_closed": prev_closed,
+            "cleared_active": prev_active,
+            "backup_saved": backup_file.name if backup_file else None,
+            "message": f"Successfully cleared {prev_closed} closed trades from memory & disk." + (f" Backup saved to {backup_file.name}" if backup_file else "")
+        }
 
 
 # Global singleton

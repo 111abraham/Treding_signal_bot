@@ -12,6 +12,8 @@ config.json
 # Local Runtime Data
 trade_outcomes.json
 backend/trade_outcomes.json
+*trade_outcomes_backup*.json
+backend/*trade_outcomes_backup*.json
 
 # System & IDE files
 .DS_Store

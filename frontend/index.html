@@ -253,8 +253,9 @@
           <div class="card-header">
             <h3>📈 WIN-RATE & ACCURACY</h3>
             <div class="perf-header-actions">
-              <button class="hist-action-btn" id="btnExportHistory" title="Export trade history database to JSON">📥 Export</button>
+              <button class="hist-action-btn" id="btnExportHistory" title="Export trade history to Excel (CSV) or Backup (JSON)">📥 Export</button>
               <button class="hist-action-btn" id="btnImportHistory" title="Import / restore trade history from JSON">📤 Import</button>
+              <button class="hist-action-btn danger-btn" id="btnClearHistory" title="Clear history and start from scratch (automatic backup saved)">🧹 Clear</button>
               <input type="file" id="historyFileInput" accept=".json" style="display: none;" />
               <span class="badge" id="perfActiveCount">0 Active</span>
             </div>
@@ -473,6 +474,37 @@
               <button type="submit" class="btn btn-primary">Add Asset</button>
             </div>
           </form>
+        </div>
+      </div>
+    <!-- EXPORT OPTIONS MODAL -->
+    <div class="modal-backdrop" id="exportModal" style="display: none;">
+      <div class="modal-dialog" style="max-width: 460px;">
+        <div class="modal-header">
+          <h2>📥 Export Trade History</h2>
+          <button class="modal-close" id="btnCloseExportModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; line-height: 1.4;">
+            Choose your format and filter. <b>CSV</b> opens directly in <b>Excel</b> for sorting, filtering, and spreadsheet formulas. <b>JSON</b> is for complete backups and terminal re-importing.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-primary" id="btnExportCsvAll" style="text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600;">
+              📊 Export All as CSV (Excel Spreadsheet)
+              <div style="font-size: 10px; opacity: 0.8; font-weight: normal; margin-top: 3px;">Full ledger with symbols, timeframes, prices, PnL %, and R-multiples</div>
+            </button>
+            <button class="btn btn-primary" id="btnExportCsvFiltered" style="text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600; background: #1e3a5f;">
+              📊 Export Current Timeframe (<span class="export-current-tf-label">ALL</span>) as CSV
+              <div style="font-size: 10px; opacity: 0.8; font-weight: normal; margin-top: 3px;">Exports only trades matching your active timeframe filter</div>
+            </button>
+            <button class="btn btn-secondary" id="btnExportJsonAll" style="text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600;">
+              💾 Export Full Backup as JSON
+              <div style="font-size: 10px; opacity: 0.8; font-weight: normal; margin-top: 3px;">Full database backup for terminal restore and re-importing</div>
+            </button>
+            <button class="btn btn-secondary" id="btnExportJsonFiltered" style="text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600;">
+              💾 Export Current Timeframe (<span class="export-current-tf-label">ALL</span>) as JSON
+              <div style="font-size: 10px; opacity: 0.8; font-weight: normal; margin-top: 3px;">Exports only active timeframe trades as JSON</div>
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -296,14 +296,36 @@ async def get_performance(
 
 
 @app.get("/api/performance/export")
-async def export_performance_history():
-    """Exports full trade outcome ledger as a downloadable JSON file."""
-    data = outcome_tracker.export_history()
+async def export_performance_history(
+    format: str = Query("json", description="Export format: 'json' or 'csv'"),
+    timeframe: Optional[str] = Query(None, description="Optional timeframe filter")
+):
+    """Exports full trade outcome ledger as a downloadable JSON or CSV file (ready for Excel)."""
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    headers = {
-        "Content-Disposition": f"attachment; filename=trade_history_export_{now_str}.json"
-    }
-    return JSONResponse(content=data, headers=headers)
+    tf_tag = f"_{timeframe}" if timeframe and timeframe.upper() != "ALL" else ""
+
+    if format.lower() == "csv":
+        csv_content = outcome_tracker.export_csv(timeframe=timeframe)
+        headers = {
+            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}_{now_str}.csv"'
+        }
+        return Response(content=csv_content, media_type="text/csv", headers=headers)
+    else:
+        data = outcome_tracker.export_history(timeframe=timeframe)
+        headers = {
+            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}_{now_str}.json"'
+        }
+        return JSONResponse(content=data, headers=headers)
+
+
+@app.post("/api/performance/clear")
+async def clear_performance_history(backup: bool = Query(True)):
+    """Clears all active and closed trades from memory and storage, creating a safety backup first."""
+    try:
+        res = outcome_tracker.clear_history(backup=backup)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/performance/import")

@@ -84,7 +84,14 @@ const perfConvictionFilter = document.getElementById("perfConvictionFilter");
 const perfConvictionLabel = document.getElementById("perfConvictionLabel");
 const btnExportHistory = document.getElementById("btnExportHistory");
 const btnImportHistory = document.getElementById("btnImportHistory");
+const btnClearHistory = document.getElementById("btnClearHistory");
 const historyFileInput = document.getElementById("historyFileInput");
+const exportModal = document.getElementById("exportModal");
+const btnCloseExportModal = document.getElementById("btnCloseExportModal");
+const btnExportCsvAll = document.getElementById("btnExportCsvAll");
+const btnExportCsvFiltered = document.getElementById("btnExportCsvFiltered");
+const btnExportJsonAll = document.getElementById("btnExportJsonAll");
+const btnExportJsonFiltered = document.getElementById("btnExportJsonFiltered");
 const tabRecentSignals = document.getElementById("tabRecentSignals");
 const tabResolvedTrades = document.getElementById("tabResolvedTrades");
 const resolvedTradesList = document.getElementById("resolvedTradesList");
@@ -1419,25 +1426,88 @@ async function loadPerformance() {
 
 // 5. EVENT LISTENERS & MODALS
 function setupEventListeners() {
-  // History Export & Import Action Buttons
+  // Download helper for CSV / JSON export
+  async function downloadExportFile(format, tf = null) {
+    try {
+      const tfParam = tf && tf.toUpperCase() !== "ALL" ? `&timeframe=${encodeURIComponent(tf)}` : "";
+      const res = await fetch(`/api/performance/export?format=${format}${tfParam}`);
+      if (!res.ok) throw new Error("Failed to export history");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const ext = format === "csv" ? "csv" : "json";
+      const tfSuffix = tf && tf.toUpperCase() !== "ALL" ? `_${tf}` : "";
+      a.href = url;
+      a.download = `trade_history${tfSuffix}_${ts}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      if (exportModal) exportModal.style.display = "none";
+    } catch (e) {
+      console.error("Export error:", e);
+      alert(`Failed to export trade history: ${e.message}`);
+    }
+  }
+
+  // History Export Modal & Actions
   if (btnExportHistory) {
-    btnExportHistory.addEventListener("click", async () => {
+    btnExportHistory.addEventListener("click", () => {
+      if (exportModal) {
+        document.querySelectorAll(".export-current-tf-label").forEach((el) => {
+          el.textContent = currentSignalTfFilter || "ALL";
+        });
+        exportModal.style.display = "flex";
+      } else {
+        downloadExportFile("json", null);
+      }
+    });
+
+    if (btnCloseExportModal && exportModal) {
+      btnCloseExportModal.addEventListener("click", () => {
+        exportModal.style.display = "none";
+      });
+    }
+
+    if (btnExportCsvAll) {
+      btnExportCsvAll.addEventListener("click", () => downloadExportFile("csv", null));
+    }
+    if (btnExportCsvFiltered) {
+      btnExportCsvFiltered.addEventListener("click", () => downloadExportFile("csv", currentSignalTfFilter));
+    }
+    if (btnExportJsonAll) {
+      btnExportJsonAll.addEventListener("click", () => downloadExportFile("json", null));
+    }
+    if (btnExportJsonFiltered) {
+      btnExportJsonFiltered.addEventListener("click", () => downloadExportFile("json", currentSignalTfFilter));
+    }
+  }
+
+  // Clear / Reset Trade History
+  if (btnClearHistory) {
+    btnClearHistory.addEventListener("click", async () => {
+      const ok = confirm(
+        "⚠️ CLEAR TRADE HISTORY & START FROM SCRATCH?\n\n" +
+        "This will reset all active and closed trade records in memory and on disk.\n" +
+        "An automatic safety backup copy will be saved before clearing.\n\n" +
+        "Click OK to clear history."
+      );
+      if (!ok) return;
+
       try {
-        const res = await fetch("/api/performance/export");
-        if (!res.ok) throw new Error("Failed to export history");
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-        a.href = url;
-        a.download = `trade_history_export_${ts}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        const res = await fetch("/api/performance/clear", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert(`🧹 Trade history cleared successfully!\n${data.message}`);
+          await loadPerformance();
+          await loadSignals();
+        } else {
+          alert(`Failed to clear: ${data.message || "Unknown error"}`);
+        }
       } catch (e) {
-        console.error("Export error:", e);
-        alert(`Failed to export trade history: ${e.message}`);
+        console.error("Clear error:", e);
+        alert(`Error clearing history: ${e.message}`);
       }
     });
   }
