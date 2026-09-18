@@ -516,6 +516,22 @@ async function loadStatus() {
     // Device badge
     deviceText.textContent = data.device.includes("cuda") ? "⚡ RTX 5080 (CUDA)" : "💻 24-Core CPU";
 
+    // MT5 status badge
+    if (data.mt5) {
+      const mt5Badge = document.getElementById("mt5Badge");
+      const mt5Text = document.getElementById("mt5Text");
+      if (mt5Badge && mt5Text) {
+        if (data.mt5.is_connected) {
+          mt5Badge.className = "metric-badge mt5-badge connected";
+          const srv = data.mt5.account?.server || "Live";
+          mt5Text.textContent = `🟢 MT5: ${srv}`;
+        } else {
+          mt5Badge.className = "metric-badge mt5-badge";
+          mt5Text.textContent = "⚪ MT5: Offline";
+        }
+      }
+    }
+
     // Scan progress
     scanStatusText.textContent = `Status: ${data.scan_status_text}`;
     if (data.is_scanning) {
@@ -693,6 +709,25 @@ async function loadPerformance() {
 
 // 5. EVENT LISTENERS & MODALS
 function setupEventListeners() {
+  // MT5 Badge Click to connect/refresh
+  const mt5Badge = document.getElementById("mt5Badge");
+  if (mt5Badge) {
+    mt5Badge.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/mt5/connect", { method: "POST" });
+        const resData = await res.json();
+        if (resData.success) {
+          alert(`✅ Successfully connected to MetaTrader 5 (${resData.status.account?.server || "Server"})!\nAccount: ${resData.status.account?.login || "N/A"}`);
+        } else {
+          alert(`ℹ️ MetaTrader 5 status: ${resData.status.last_error || "Not connected"}.\n\nEnsure MetaTrader 5 is launched on your PC!`);
+        }
+        await loadStatus();
+      } catch (e) {
+        console.error("MT5 connect error:", e);
+      }
+    });
+  }
+
   // Timeframe selector
   timeframeSelect.addEventListener("change", (e) => {
     currentTimeframe = e.target.value;

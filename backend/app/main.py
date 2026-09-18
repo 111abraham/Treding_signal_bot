@@ -19,6 +19,7 @@ from app.forecasting.outcome_tracker import outcome_tracker
 from app.telegram_bot import telegram_notifier
 from app.scheduler import scan_engine, background_scheduler_loop
 from app.forecasting.timesfm_arbiter import timesfm_arbiter
+from app.mt5_bridge import mt5_bridge
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TradingTerminal")
@@ -116,8 +117,22 @@ async def get_system_status():
         "scan_status_text": scan_engine.current_status,
         "last_scan_time": scan_engine.last_scan_time,
         "timeframe": config_manager.get("timeframe", "1h"),
-        "timesfm": timesfm_arbiter.get_status()
+        "timesfm": timesfm_arbiter.get_status(),
+        "mt5": mt5_bridge.get_status()
     }
+
+
+@app.get("/api/mt5/status")
+async def get_mt5_status():
+    """Returns MT5 connection state, broker server, and account details."""
+    return mt5_bridge.get_status()
+
+
+@app.post("/api/mt5/connect")
+async def connect_mt5():
+    """Attempts to connect to the running MetaTrader 5 terminal."""
+    success = mt5_bridge.initialize()
+    return {"success": success, "status": mt5_bridge.get_status()}
 
 
 @app.get("/api/watchlist")

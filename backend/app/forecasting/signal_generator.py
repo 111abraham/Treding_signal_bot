@@ -74,10 +74,27 @@ class SignalGenerator:
         # Risk-to-Reward Ratio
         rr_ratio = round(tp_distance / sl_distance, 2) if sl_distance > 0 else 0.0
 
-        # Spread Guardrail: Estimated spread must be < 5% of Stop-Loss distance
-        # est_spread_pct is given in % (e.g. 0.02% of price)
-        estimated_spread_value = current_price * (est_spread_pct / 100.0)
-        spread_to_sl_ratio = round((estimated_spread_value / sl_distance), 4)
+        # Spread Guardrail: Live FundedNext MT5 spread or calibrated fallback must be < 5% of Stop-Loss distance
+        live_tick = None
+        try:
+            from app.mt5_bridge import mt5_bridge
+            if mt5_bridge.is_connected:
+                live_tick = mt5_bridge.get_live_spread(symbol)
+        except Exception:
+            live_tick = None
+
+        if live_tick:
+            actual_spread_value = live_tick["spread_value"]
+            actual_spread_pct = live_tick["spread_pct"]
+            spread_source = "FundedNext MT5 (Live)"
+            spread_points = live_tick["spread_points"]
+        else:
+            actual_spread_value = current_price * (est_spread_pct / 100.0)
+            actual_spread_pct = est_spread_pct
+            spread_source = "Calibrated Model"
+            spread_points = None
+
+        spread_to_sl_ratio = round((actual_spread_value / sl_distance), 4)
         max_allowed_ratio = strategy_config.get("max_spread_to_sl_ratio", 0.05)
         passes_spread_filter = spread_to_sl_ratio <= max_allowed_ratio
 
@@ -157,9 +174,11 @@ class SignalGenerator:
             "sl_distance": round(sl_distance, 4),
             "tp_distance": round(tp_distance, 4),
             "risk_reward_ratio": rr_ratio,
-            "estimated_spread": round(estimated_spread_value, 4),
+            "estimated_spread": round(actual_spread_value, 4),
             "spread_to_sl_ratio_pct": round(spread_to_sl_ratio * 100, 2),
             "passes_spread_filter": passes_spread_filter,
+            "spread_source": spread_source,
+            "live_spread_points": spread_points,
             "conviction": conviction,
             "is_actionable": is_actionable,
             "session_name": session_info["active_session"],

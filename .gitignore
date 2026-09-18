@@ -19,4 +19,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+installers/
+*.exe
 
