@@ -1076,14 +1076,10 @@ function renderSignalsList() {
     return;
   }
 
-  // 1. Small scale timeframe priority sorting (5m -> 15m -> 30m -> 1h -> 4h -> 1d), then newest first
-  const TF_ORDER = { "1m": 1, "5m": 2, "15m": 3, "30m": 4, "1h": 5, "4h": 6, "1d": 7 };
+  // 1. Sort signals by most recent first (newest timestamp / candle_unix at the top)
   const sorted = [...signalsData].sort((a, b) => {
-    const rankA = TF_ORDER[(a.timeframe || "").toLowerCase()] || 99;
-    const rankB = TF_ORDER[(b.timeframe || "").toLowerCase()] || 99;
-    if (rankA !== rankB) return rankA - rankB;
-    const timeA = a.candle_unix || (a.timestamp ? new Date(a.timestamp).getTime() : 0);
-    const timeB = b.candle_unix || (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+    const timeA = a.candle_unix || (a.timestamp ? (typeof a.timestamp === "number" ? a.timestamp : new Date(a.timestamp).getTime() / 1000) : 0);
+    const timeB = b.candle_unix || (b.timestamp ? (typeof b.timestamp === "number" ? b.timestamp : new Date(b.timestamp).getTime() / 1000) : 0);
     return timeB - timeA;
   });
 
