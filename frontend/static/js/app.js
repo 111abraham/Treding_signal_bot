@@ -21,8 +21,15 @@ let activeTradesData = [];
 let showCountdownTimers = true;
 let currentForecastCandles = 5;
 let currentActiveSignal = null;
+let currentSignalTfFilter = "ALL";
+let showChartTradeMarkers = true;
+let pinnedActiveSignal = null;
+let signalsData = [];
+let closedTradesData = [];
+let currentHistoricalCandles = [];
 
 // DOM Elements
+const signalsTfFilterBar = document.getElementById("signalsTfFilterBar");
 const chartContainer = document.getElementById("tradingviewChart");
 const chartOverlay = document.getElementById("chartLoadingOverlay");
 const currentPriceDisplay = document.getElementById("currentPriceDisplay");
@@ -136,7 +143,7 @@ function getTimeframeSeconds(tf) {
 }
 
 // Live Countdown Engine for Active Chart Signal Lifespan
-function updateActiveSignalLifespanClock(nowSec, tfSec) {
+function updateActiveSignalLifespanClock(nowSec) {
   if (!showCountdownTimers) {
     if (lifespanPill) lifespanPill.style.display = "none";
     if (rowSignalLifespan) rowSignalLifespan.style.display = "none";
@@ -149,32 +156,41 @@ function updateActiveSignalLifespanClock(nowSec, tfSec) {
   if (!currentActiveSignal) return;
 
   nowSec = nowSec || Math.floor(Date.now() / 1000);
-  tfSec = tfSec || getTimeframeSeconds(currentTimeframe);
+
+  // CRITICAL: Signal lifespan is strictly anchored to the signal's native timeframe, NEVER the chart's current viewing timeframe
+  const sigTf = currentActiveSignal.timeframe || currentTimeframe;
+  const sigTfSec = getTimeframeSeconds(sigTf);
 
   const activeTrade = activeTradesData.find(
-    (t) => t.symbol.toUpperCase() === currentSymbol.toUpperCase() && t.timeframe === currentTimeframe
+    (t) => (currentActiveSignal.id && t.id === currentActiveSignal.id) ||
+           (t.symbol.toUpperCase() === (currentActiveSignal.symbol || currentSymbol).toUpperCase() && t.timeframe === sigTf)
   );
 
   let maxBars = currentActiveSignal.max_candles || currentForecastCandles || 5;
   let elapsedBars = 0;
-  let secLeft = maxBars * tfSec;
+  let secLeft = maxBars * sigTfSec;
 
   if (activeTrade) {
     maxBars = activeTrade.max_candles || maxBars;
     const entryUnix = activeTrade.entry_candle_unix || activeTrade.opened_unix || nowSec;
-    const expUnix = activeTrade.expires_at_unix || (entryUnix + (maxBars * tfSec));
+    const expUnix = activeTrade.expires_at_unix || (entryUnix + (maxBars * sigTfSec));
     secLeft = Math.max(0, expUnix - nowSec);
 
     if (activeTrade.candles_monitored !== undefined && activeTrade.candles_monitored !== null) {
       elapsedBars = activeTrade.candles_monitored;
     } else {
-      elapsedBars = Math.floor(Math.max(0, nowSec - entryUnix) / tfSec);
+      elapsedBars = Math.floor(Math.max(0, nowSec - entryUnix) / sigTfSec);
     }
     elapsedBars = Math.min(maxBars, elapsedBars);
+  } else if (currentActiveSignal.candle_unix || currentActiveSignal.entry_candle_unix || currentActiveSignal.timestamp) {
+    const entryUnix = currentActiveSignal.candle_unix || currentActiveSignal.entry_candle_unix || Math.floor(new Date(currentActiveSignal.timestamp).getTime() / 1000) || nowSec;
+    const expUnix = currentActiveSignal.expires_at_unix || (entryUnix + (maxBars * sigTfSec));
+    secLeft = Math.max(0, expUnix - nowSec);
+    elapsedBars = Math.min(maxBars, Math.max(0, Math.floor((nowSec - entryUnix) / sigTfSec)));
   } else {
-    const nextBoundary = Math.ceil(nowSec / tfSec) * tfSec;
+    const nextBoundary = Math.ceil(nowSec / sigTfSec) * sigTfSec;
     const curCandleRemaining = Math.max(0, nextBoundary - nowSec);
-    secLeft = curCandleRemaining + Math.max(0, maxBars - 1) * tfSec;
+    secLeft = curCandleRemaining + Math.max(0, maxBars - 1) * sigTfSec;
     elapsedBars = 0;
   }
 
@@ -189,17 +205,17 @@ function updateActiveSignalLifespanClock(nowSec, tfSec) {
       seg.className = "lifespan-segment";
       if (isFinished) {
         seg.classList.add("elapsed");
-        seg.title = `Bar ${i + 1} of ${maxBars} (Completed)`;
+        seg.title = `Bar ${i + 1} of ${maxBars} [${sigTf}] (Completed)`;
       } else if (i < elapsedBars) {
         seg.classList.add("elapsed");
-        seg.title = `Bar ${i + 1} of ${maxBars} (Completed)`;
+        seg.title = `Bar ${i + 1} of ${maxBars} [${sigTf}] (Completed)`;
       } else if (i === elapsedBars) {
         seg.classList.add("current");
         if (currentBar === maxBars) seg.classList.add("danger");
-        seg.title = `Bar ${i + 1} of ${maxBars} (Active Now)`;
+        seg.title = `Bar ${i + 1} of ${maxBars} [${sigTf}] (Active Now)`;
       } else {
         seg.classList.add("pending");
-        seg.title = `Bar ${i + 1} of ${maxBars} (Upcoming)`;
+        seg.title = `Bar ${i + 1} of ${maxBars} [${sigTf}] (Upcoming)`;
       }
       lifespanSegments.appendChild(seg);
     }
@@ -208,17 +224,17 @@ function updateActiveSignalLifespanClock(nowSec, tfSec) {
   const durStr = formatRemainingDuration(secLeft);
   if (lvlSignalRemaining) {
     if (isFinished) {
-      lvlSignalRemaining.textContent = `⏱️ Finished (${maxBars}/${maxBars} bars)`;
+      lvlSignalRemaining.textContent = `⏱️ Finished (${maxBars}/${maxBars} [${sigTf}])`;
     } else {
-      lvlSignalRemaining.textContent = `⏳ Bar ${currentBar} of ${maxBars} (~${durStr} left)`;
+      lvlSignalRemaining.textContent = `⏳ Bar ${currentBar} of ${maxBars} [${sigTf}] (~${durStr} left)`;
     }
   }
 
   if (lifespanPillValue) {
     if (isFinished) {
-      lifespanPillValue.textContent = `⏱️ Finished (${maxBars}/${maxBars})`;
+      lifespanPillValue.textContent = `⏱️ Finished (${maxBars}/${maxBars} [${sigTf}])`;
     } else {
-      lifespanPillValue.textContent = `⏳ Bar ${currentBar}/${maxBars} (${durStr} left)`;
+      lifespanPillValue.textContent = `⏳ Bar ${currentBar}/${maxBars} [${sigTf}] (${durStr} left)`;
     }
   }
 }
@@ -261,8 +277,8 @@ function startLiveCountdownEngine() {
       }
     }
 
-    // 2. Active Chart Signal Lifespan
-    updateActiveSignalLifespanClock(nowSec, tfSec);
+    // 2. Active Chart Signal Lifespan (anchored strictly to signal native timeframe)
+    updateActiveSignalLifespanClock(nowSec);
 
     // 3. Signal list cards countdown
     document.querySelectorAll(".sig-countdown").forEach((el) => {
@@ -287,11 +303,26 @@ function startLiveCountdownEngine() {
   }, 1000);
 }
 
+async function loadInitialSettings() {
+  try {
+    const res = await fetch("/api/settings");
+    if (res.ok) {
+      const cfg = await res.json();
+      showCountdownTimers = cfg.strategy?.show_countdown_timers !== false;
+      showChartTradeMarkers = cfg.strategy?.show_chart_trade_markers !== false;
+      currentForecastCandles = cfg.forecast_candles || 5;
+    }
+  } catch (e) {
+    console.debug("Failed loading initial settings:", e);
+  }
+}
+
 // Initialize Application
 document.addEventListener("DOMContentLoaded", async () => {
   initChart();
   setupEventListeners();
   startLiveCountdownEngine();
+  await loadInitialSettings();
   await loadStatus();
   await loadWatchlist();
   await loadSignals();
@@ -379,13 +410,216 @@ function initChart() {
       height: chartContainer.clientHeight,
     });
   });
+
+  // Subscribe to chart clicks for bidirectional navigation to signals/outcomes
+  chart.subscribeClick((param) => {
+    if (!param || !param.time) return;
+    handleChartClick(param.time);
+  });
+}
+
+function findNearestCandleTime(targetUnix, maxDiffSec = 3600) {
+  if (!currentHistoricalCandles || currentHistoricalCandles.length === 0) return null;
+  let bestTime = null;
+  let minDiff = Infinity;
+  for (let i = 0; i < currentHistoricalCandles.length; i++) {
+    const cTime = currentHistoricalCandles[i].time;
+    const diff = Math.abs(cTime - targetUnix);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestTime = cTime;
+    }
+  }
+  if (minDiff <= (maxDiffSec * 2.5)) {
+    return bestTime;
+  }
+  return null;
+}
+
+function renderChartTradeMarkers() {
+  if (!historicalSeries) return;
+  if (!showChartTradeMarkers) {
+    try { historicalSeries.setMarkers([]); } catch (e) {}
+    return;
+  }
+
+  const symbolUpper = (currentSymbol || "").toUpperCase();
+  const currentTrades = [];
+
+  // Active trades matching symbol
+  activeTradesData.forEach((t) => {
+    if ((t.symbol || "").toUpperCase() === symbolUpper) {
+      currentTrades.push({ ...t, isActive: true });
+    }
+  });
+
+  // Closed trades matching symbol
+  closedTradesData.forEach((t) => {
+    if ((t.symbol || "").toUpperCase() === symbolUpper) {
+      currentTrades.push({ ...t, isActive: false });
+    }
+  });
+
+  // Include pinned active signal if not already present
+  if (pinnedActiveSignal && (pinnedActiveSignal.symbol || "").toUpperCase() === symbolUpper) {
+    const exists = currentTrades.some(
+      (t) => (t.id && t.id === pinnedActiveSignal.id) ||
+             (t.entry_price === pinnedActiveSignal.entry_price && t.timeframe === pinnedActiveSignal.timeframe)
+    );
+    if (!exists) {
+      currentTrades.push({ ...pinnedActiveSignal, isActive: true });
+    }
+  }
+
+  const markers = [];
+  const tfSec = getTimeframeSeconds(currentTimeframe);
+
+  currentTrades.forEach((tr) => {
+    const entryUnix = tr.entry_candle_unix || tr.opened_unix || tr.candle_unix;
+    if (!entryUnix) return;
+
+    const matchedTime = findNearestCandleTime(entryUnix, tr.step_seconds || getTimeframeSeconds(tr.timeframe) || tfSec);
+    if (!matchedTime) return;
+
+    const isBull = tr.direction === "BULLISH";
+    // Entry marker (arrow up for buy, arrow down for sell)
+    markers.push({
+      time: matchedTime,
+      position: isBull ? "belowBar" : "aboveBar",
+      color: isBull ? "#10b981" : "#ef4444",
+      shape: isBull ? "arrowUp" : "arrowDown",
+      text: `${isBull ? "BUY" : "SELL"} @ ${formatPrice(tr.entry_price)}`,
+      id: `entry_${tr.id || entryUnix}`,
+    });
+
+    // Exit marker for closed trades
+    if (!tr.isActive && tr.status === "CLOSED") {
+      const exitUnix = tr.exit_candle_unix || tr.closed_unix;
+      if (exitUnix) {
+        const matchedExitTime = findNearestCandleTime(exitUnix, tr.step_seconds || getTimeframeSeconds(tr.timeframe) || tfSec);
+        if (matchedExitTime) {
+          const isWin = tr.outcome === "WIN" || tr.outcome === "EXPIRED_PROFIT";
+          const outcomeColor = isWin ? "#10b981" : (tr.outcome === "LOSS" || tr.outcome === "EXPIRED_LOSS" ? "#ef4444" : "#f59e0b");
+          const rStr = tr.realized_r !== undefined ? `${tr.realized_r >= 0 ? "+" : ""}${tr.realized_r}R` : "";
+          markers.push({
+            time: matchedExitTime,
+            position: isBull ? "aboveBar" : "belowBar",
+            color: outcomeColor,
+            shape: isWin ? "circle" : "square",
+            text: `${tr.outcome || "EXIT"} ${rStr}`,
+            id: `exit_${tr.id || exitUnix}`,
+          });
+        }
+      }
+    }
+  });
+
+  // Sort strictly ascending by time for Lightweight Charts
+  markers.sort((a, b) => a.time - b.time);
+  try {
+    historicalSeries.setMarkers(markers);
+  } catch (err) {
+    console.debug("Failed setting chart markers:", err);
+  }
+}
+
+function handleChartClick(clickTime) {
+  const symbolUpper = (currentSymbol || "").toUpperCase();
+  const tfSec = getTimeframeSeconds(currentTimeframe);
+  const toleranceSec = tfSec * 2.5;
+
+  let found = null;
+  let isOutcome = false;
+
+  // 1. Search in signalsData
+  for (const sig of signalsData) {
+    if ((sig.symbol || "").toUpperCase() !== symbolUpper) continue;
+    const entryUnix = sig.candle_unix || Math.floor(new Date(sig.timestamp).getTime() / 1000);
+    if (entryUnix && Math.abs(entryUnix - clickTime) <= toleranceSec) {
+      found = sig;
+      isOutcome = false;
+      break;
+    }
+  }
+
+  // 2. If not found in signals, search in activeTradesData
+  if (!found) {
+    for (const t of activeTradesData) {
+      if ((t.symbol || "").toUpperCase() !== symbolUpper) continue;
+      const entryUnix = t.entry_candle_unix || t.opened_unix;
+      if (entryUnix && Math.abs(entryUnix - clickTime) <= toleranceSec) {
+        found = t;
+        isOutcome = false;
+        break;
+      }
+    }
+  }
+
+  // 3. If not found, search in closedTradesData
+  if (!found) {
+    for (const tr of closedTradesData) {
+      if ((tr.symbol || "").toUpperCase() !== symbolUpper) continue;
+      const entryUnix = tr.entry_candle_unix || tr.opened_unix;
+      const exitUnix = tr.exit_candle_unix || tr.closed_unix;
+      if ((entryUnix && Math.abs(entryUnix - clickTime) <= toleranceSec) ||
+          (exitUnix && Math.abs(exitUnix - clickTime) <= toleranceSec)) {
+        found = tr;
+        isOutcome = true;
+        break;
+      }
+    }
+  }
+
+  if (!found) return;
+
+  // Switch tabs if necessary
+  if (isOutcome) {
+    if (tabResolvedTrades) tabResolvedTrades.click();
+  } else {
+    if (tabRecentSignals) tabRecentSignals.click();
+  }
+
+  // Locate the card
+  const container = isOutcome ? resolvedTradesList : signalHistoryList;
+  if (!container) return;
+
+  const tradeId = found.id || `${found.symbol}_${found.timeframe}_${found.entry_candle_unix || found.candle_unix || ""}`;
+  const cards = container.querySelectorAll(".signal-card-mini");
+  let matchedCard = null;
+
+  cards.forEach((c) => {
+    c.classList.remove("active-signal-card");
+    if (c.dataset.tradeId === tradeId || c.textContent.includes(found.symbol)) {
+      if (!matchedCard) matchedCard = c;
+    }
+  });
+
+  if (matchedCard) {
+    matchedCard.classList.add("active-signal-card");
+    matchedCard.classList.add("pulse-highlight");
+    matchedCard.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => matchedCard.classList.remove("pulse-highlight"), 1500);
+  }
+
+  // Update levels and pinned signal
+  pinnedActiveSignal = found;
+  currentActiveSignal = found;
+  const lastHistorical = currentHistoricalCandles[currentHistoricalCandles.length - 1];
+  updateGuardrailsAndLevels(found, lastHistorical?.close);
+  updateActiveSignalLifespanClock();
 }
 
 
 // 2. DATA LOADING & CHART RENDERING
-async function loadChartData(symbol, timeframe) {
+async function loadChartData(symbol, timeframe, pinnedSignal = null) {
   chartOverlay.style.display = "flex";
   clearPriceLines();
+
+  if (pinnedSignal) {
+    pinnedActiveSignal = pinnedSignal;
+  } else if (!timeframe || (pinnedActiveSignal && pinnedActiveSignal.symbol.toUpperCase() !== symbol.toUpperCase())) {
+    pinnedActiveSignal = null;
+  }
 
   if (timeframe) {
     currentTimeframe = timeframe;
@@ -413,13 +647,14 @@ async function loadChartData(symbol, timeframe) {
     activeNameElem.textContent = data.name;
     activeCategoryElem.textContent = data.category;
     
-    const lastHistorical = data.candles[data.candles.length - 1];
+    currentHistoricalCandles = data.candles || [];
+    const lastHistorical = currentHistoricalCandles[currentHistoricalCandles.length - 1];
     if (lastHistorical) {
       currentPriceDisplay.textContent = formatPrice(lastHistorical.close);
     }
 
     // Set Historical Candles (500)
-    historicalSeries.setData(data.candles);
+    historicalSeries.setData(currentHistoricalCandles);
 
     // Render Predicted Future Candles
     const predCandles = data.forecast.predicted_candles || [];
@@ -436,8 +671,12 @@ async function loadChartData(symbol, timeframe) {
       chart.timeScale().fitContent();
     }
 
-    // Prioritize active trade if one exists, otherwise use fresh live forecast signal
-    currentActiveSignal = data.active_trade || data.signal;
+    // Prioritize pinned signal (clicked card), then active trade, then fresh live signal
+    if (pinnedActiveSignal && pinnedActiveSignal.symbol.toUpperCase() === data.symbol.toUpperCase()) {
+      currentActiveSignal = pinnedActiveSignal;
+    } else {
+      currentActiveSignal = data.active_trade || data.signal;
+    }
 
     // Update Direction Pill Dynamic Horizon Label (e.g. 5-Candle Direction)
     const maxBars = currentActiveSignal?.max_candles || data.forecast?.predicted_candles?.length || currentForecastCandles || 5;
@@ -449,6 +688,9 @@ async function loadChartData(symbol, timeframe) {
 
     // Update Guardrails & Levels Card
     updateGuardrailsAndLevels(currentActiveSignal, lastHistorical?.close);
+
+    // Render Chart Trade Markers (entry arrows & exit circles)
+    renderChartTradeMarkers();
 
     // Update Higher Timeframe Radar & Confluence
     updateHtfConfluence(data.htf_confluence);
@@ -622,14 +864,30 @@ function updateGuardrailsAndLevels(signal, currentClose) {
   );
 
   // Spread vs Stop Loss Guardrail (< 5% Rule)
-  const ratioPct = signal.spread_to_sl_ratio_pct;
+  let ratioPct = signal.spread_to_sl_ratio_pct;
+  if (ratioPct === undefined || ratioPct === null || isNaN(ratioPct)) {
+    if (signal.sl_distance && signal.sl_distance > 0 && signal.estimated_spread) {
+      ratioPct = (signal.estimated_spread / signal.sl_distance) * 100.0;
+    } else if (signal.spread_to_sl_ratio !== undefined && signal.spread_to_sl_ratio !== null && !isNaN(signal.spread_to_sl_ratio)) {
+      ratioPct = signal.spread_to_sl_ratio * 100.0;
+    } else if (signal.sl_distance && signal.sl_distance > 0 && signal.entry_price) {
+      ratioPct = ((signal.entry_price * 0.0002) / signal.sl_distance) * 100.0;
+    } else {
+      ratioPct = 1.5;
+    }
+  }
+  ratioPct = Number(Number(ratioPct).toFixed(2));
   currentSpreadRatio.textContent = `${ratioPct}% of SL`;
   
   // Meter visualization: 5% is midpoint (50% bar width)
-  const meterWidth = Math.min(100, (ratioPct / 10.0) * 100);
+  const meterWidth = Math.max(0, Math.min(100, (ratioPct / 10.0) * 100));
   spreadMeterFill.style.width = `${meterWidth}%`;
 
-  if (signal.passes_spread_filter) {
+  const passesSpread = (signal.passes_spread_filter !== undefined && signal.passes_spread_filter !== null)
+    ? Boolean(signal.passes_spread_filter)
+    : (ratioPct <= 5.0);
+
+  if (passesSpread) {
     spreadMeterFill.classList.remove("warning");
     spreadStatusPill.className = "guardrail-status-pill";
     spreadStatusPill.innerHTML = `✅ <b>PASS:</b> Spread is ${ratioPct}% (&lt; 5% Target Met)`;
@@ -769,70 +1027,103 @@ async function loadStatus() {
   }
 }
 
+function renderSignalsList() {
+  if (!signalsData || signalsData.length === 0) {
+    signalHistoryList.innerHTML = `<div class="empty-history">No signals recorded yet. Click "Run Scan Now" to scan active watchlist.</div>`;
+    signalCountBadge.textContent = "0";
+    return;
+  }
+
+  // 1. Small scale timeframe priority sorting (5m -> 15m -> 30m -> 1h -> 4h -> 1d), then newest first
+  const TF_ORDER = { "1m": 1, "5m": 2, "15m": 3, "30m": 4, "1h": 5, "4h": 6, "1d": 7 };
+  const sorted = [...signalsData].sort((a, b) => {
+    const rankA = TF_ORDER[(a.timeframe || "").toLowerCase()] || 99;
+    const rankB = TF_ORDER[(b.timeframe || "").toLowerCase()] || 99;
+    if (rankA !== rankB) return rankA - rankB;
+    const timeA = a.candle_unix || (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+    const timeB = b.candle_unix || (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+    return timeB - timeA;
+  });
+
+  // 2. Filter by selected timeframe sub-filter tab
+  const filtered = currentSignalTfFilter === "ALL"
+    ? sorted
+    : sorted.filter((s) => (s.timeframe || "").toLowerCase() === currentSignalTfFilter.toLowerCase());
+
+  signalCountBadge.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    signalHistoryList.innerHTML = `<div class="empty-history">No ${currentSignalTfFilter} signals recorded yet.</div>`;
+    return;
+  }
+
+  signalHistoryList.innerHTML = "";
+  filtered.forEach((sig) => {
+    const card = document.createElement("div");
+    card.className = "signal-card-mini";
+    const tradeId = sig.id || `${sig.symbol}_${sig.timeframe}_${sig.candle_unix || ""}`;
+    card.dataset.tradeId = tradeId;
+    if (pinnedActiveSignal && (pinnedActiveSignal.id === tradeId || (pinnedActiveSignal.symbol === sig.symbol && pinnedActiveSignal.timeframe === sig.timeframe && pinnedActiveSignal.entry_price === sig.entry_price))) {
+      card.classList.add("active-signal-card");
+    }
+
+    const badgeClass = sig.direction === "BULLISH" ? "sig-badge-long" : "sig-badge-short";
+    const dirText = sig.direction === "BULLISH" ? "LONG" : "SHORT";
+    const dualBadge = sig.dual_ai_confluence ? `<span class="sig-badge-dual">🤖 DUAL AI</span>` : "";
+
+    const maxC = sig.max_candles || currentForecastCandles || 5;
+    const step = getTimeframeSeconds(sig.timeframe);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const entryUnix = sig.candle_unix || Math.floor(new Date(sig.timestamp).getTime() / 1000) || nowSec;
+    const expUnix = sig.expires_at_unix || (entryUnix + maxC * step);
+    const secLeft = Math.max(0, expUnix - nowSec);
+    const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
+    const currentBar = Math.min(maxC, elapsedBars + 1);
+
+    const countdownHtml = showCountdownTimers
+      ? (secLeft <= 0
+          ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC}/${maxC} [${sig.timeframe}])</span>`
+          : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ Bar ${currentBar}/${maxC} [${sig.timeframe}] (${formatRemainingDuration(secLeft)} left)</span>`)
+      : "";
+
+    card.innerHTML = `
+      <div class="sig-header">
+        <span class="sig-sym">${sig.symbol} <small style="color:var(--text-muted);font-weight:normal">${sig.timeframe}</small></span>
+        <div>
+          <span class="${badgeClass}">${dirText} ${sig.conviction}%</span>
+          ${dualBadge}
+        </div>
+      </div>
+      <div class="sig-body">
+        <span>Entry: ${formatPrice(sig.entry_price)}</span>
+        <span>R:R ${sig.risk_reward_ratio}</span>
+      </div>
+      <div class="sig-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+        <div class="sig-time">${sig.timestamp ? sig.timestamp.split(" ")[1] : ""} UTC | ${sig.session_name ? sig.session_name.split(" ")[0] : ""}</div>
+        ${countdownHtml}
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".signal-card-mini").forEach((c) => c.classList.remove("active-signal-card"));
+      card.classList.add("active-signal-card");
+      currentTimeframe = sig.timeframe;
+      if (timeframeSelect) {
+        timeframeSelect.value = sig.timeframe;
+      }
+      loadChartData(sig.symbol, sig.timeframe, sig);
+    });
+
+    signalHistoryList.appendChild(card);
+  });
+}
+
 async function loadSignals() {
   try {
     const res = await fetch("/api/signals");
     const data = await res.json();
-    const signals = data.signals || [];
-    signalCountBadge.textContent = signals.length;
-
-    if (signals.length === 0) {
-      signalHistoryList.innerHTML = `<div class="empty-history">No signals recorded yet. Click "Run Scan Now" to scan active watchlist.</div>`;
-      return;
-    }
-
-    signalHistoryList.innerHTML = "";
-    signals.forEach((sig) => {
-      const card = document.createElement("div");
-      card.className = "signal-card-mini";
-      const badgeClass = sig.direction === "BULLISH" ? "sig-badge-long" : "sig-badge-short";
-      const dirText = sig.direction === "BULLISH" ? "LONG" : "SHORT";
-
-      const dualBadge = sig.dual_ai_confluence ? `<span class="sig-badge-dual">🤖 DUAL AI</span>` : "";
-
-      const maxC = sig.max_candles || currentForecastCandles || 5;
-      const step = getTimeframeSeconds(sig.timeframe);
-      const nowSec = Math.floor(Date.now() / 1000);
-      const entryUnix = sig.candle_unix || Math.floor(new Date(sig.timestamp).getTime() / 1000) || nowSec;
-      const expUnix = sig.expires_at_unix || (entryUnix + maxC * step);
-      const secLeft = Math.max(0, expUnix - nowSec);
-      const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
-      const currentBar = Math.min(maxC, elapsedBars + 1);
-
-      const countdownHtml = showCountdownTimers
-        ? (secLeft <= 0
-            ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC}/${maxC})</span>`
-            : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ Bar ${currentBar}/${maxC} (${formatRemainingDuration(secLeft)} left)</span>`)
-        : "";
-
-      card.innerHTML = `
-        <div class="sig-header">
-          <span class="sig-sym">${sig.symbol} <small style="color:var(--text-muted);font-weight:normal">${sig.timeframe}</small></span>
-          <div>
-            <span class="${badgeClass}">${dirText} ${sig.conviction}%</span>
-            ${dualBadge}
-          </div>
-        </div>
-        <div class="sig-body">
-          <span>Entry: ${sig.entry_price}</span>
-          <span>R:R ${sig.risk_reward_ratio}</span>
-        </div>
-        <div class="sig-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-          <div class="sig-time">${sig.timestamp.split(" ")[1]} UTC | ${sig.session_name.split(" ")[0]}</div>
-          ${countdownHtml}
-        </div>
-      `;
-
-      card.addEventListener("click", () => {
-        currentTimeframe = sig.timeframe;
-        if (timeframeSelect) {
-          timeframeSelect.value = sig.timeframe;
-        }
-        loadChartData(sig.symbol, sig.timeframe);
-      });
-
-      signalHistoryList.appendChild(card);
-    });
+    signalsData = data.signals || [];
+    renderSignalsList();
   } catch (e) {
     console.error("Error loading signals:", e);
   }
@@ -847,7 +1138,9 @@ async function loadPerformance() {
     const closedTrades = data.closed_trades || [];
     const activeTrades = data.active_trades || [];
     activeTradesData = activeTrades;
+    closedTradesData = closedTrades;
     updateActiveSignalLifespanClock();
+    renderChartTradeMarkers();
 
     // Update summary metrics
     if (statWinRate) {
@@ -905,6 +1198,11 @@ async function loadPerformance() {
       closedTrades.forEach((tr) => {
         const card = document.createElement("div");
         card.className = "signal-card-mini";
+        const tradeId = tr.id || `${tr.symbol}_${tr.timeframe}_${tr.entry_candle_unix || tr.opened_unix || ""}`;
+        card.dataset.tradeId = tradeId;
+        if (pinnedActiveSignal && (pinnedActiveSignal.id === tradeId || (pinnedActiveSignal.symbol === tr.symbol && pinnedActiveSignal.timeframe === tr.timeframe && pinnedActiveSignal.entry_price === tr.entry_price))) {
+          card.classList.add("active-signal-card");
+        }
 
         let badgeClass = "sig-badge-expired";
         let outcomeLabel = tr.outcome || "EXPIRED";
@@ -934,16 +1232,20 @@ async function loadPerformance() {
             <span class="${badgeClass}">${outcomeLabel}</span>
           </div>
           <div class="sig-body">
-            <span>Entry: ${tr.entry_price} &rarr; ${tr.exit_price}</span>
+            <span>Entry: ${formatPrice(tr.entry_price)} &rarr; ${formatPrice(tr.exit_price)}</span>
             <span class="${pnlClass}">${pnlStr}</span>
           </div>
           <div class="sig-time">${candleDuration} | Conv: ${tr.conviction}% | ${tr.exit_reason || tr.closed_at}</div>
         `;
 
         card.addEventListener("click", () => {
+          document.querySelectorAll(".signal-card-mini").forEach((c) => c.classList.remove("active-signal-card"));
+          card.classList.add("active-signal-card");
           currentTimeframe = tr.timeframe || "1h";
-          timeframeSelect.value = currentTimeframe;
-          loadChartData(tr.symbol, currentTimeframe);
+          if (timeframeSelect) {
+            timeframeSelect.value = currentTimeframe;
+          }
+          loadChartData(tr.symbol, currentTimeframe, tr);
         });
 
         resolvedTradesList.appendChild(card);
@@ -989,6 +1291,7 @@ function setupEventListeners() {
       tabResolvedTrades.classList.remove("active");
       signalHistoryList.style.display = "block";
       resolvedTradesList.style.display = "none";
+      if (signalsTfFilterBar) signalsTfFilterBar.style.display = "flex";
     });
 
     tabResolvedTrades.addEventListener("click", () => {
@@ -996,8 +1299,19 @@ function setupEventListeners() {
       tabRecentSignals.classList.remove("active");
       signalHistoryList.style.display = "none";
       resolvedTradesList.style.display = "block";
+      if (signalsTfFilterBar) signalsTfFilterBar.style.display = "none";
     });
   }
+
+  // Timeframe sub-filter buttons for Signals tab
+  document.querySelectorAll(".sig-tf-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".sig-tf-tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentSignalTfFilter = tab.dataset.tf || "ALL";
+      renderSignalsList();
+    });
+  });
 
   // Conviction filter slider
   if (perfConvictionFilter) {
@@ -1064,6 +1378,8 @@ function setupEventListeners() {
       document.getElementById("autoScanEnabled").checked = cfg.auto_scan_enabled !== false;
       document.getElementById("forecastCandles").value = cfg.forecast_candles || 5;
       document.getElementById("showCountdownTimers").checked = cfg.strategy?.show_countdown_timers !== false;
+      const elMarkers = document.getElementById("showChartTradeMarkers");
+      if (elMarkers) elMarkers.checked = cfg.strategy?.show_chart_trade_markers !== false;
 
       // Populate multi-timeframe checkboxes
       const savedTfs = cfg.scan_timeframes || ["5m", "15m", "1h", "4h"];
@@ -1108,6 +1424,7 @@ function setupEventListeners() {
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
       forecast_candles: parseInt(document.getElementById("forecastCandles").value) || 5,
       show_countdown_timers: document.getElementById("showCountdownTimers").checked,
+      show_chart_trade_markers: document.getElementById("showChartTradeMarkers")?.checked !== false,
       timesfm_enabled: document.getElementById("timesfmEnabled")?.checked !== false,
       timesfm_suppress_on_conflict: document.getElementById("timesfmSuppressConflict")?.checked === true,
       timesfm_conviction_boost: parseFloat(document.getElementById("timesfmBoost")?.value || 12),
@@ -1115,6 +1432,7 @@ function setupEventListeners() {
 
     currentForecastCandles = stratData.forecast_candles;
     showCountdownTimers = stratData.show_countdown_timers;
+    showChartTradeMarkers = stratData.show_chart_trade_markers;
 
     await fetch("/api/settings/telegram", {
       method: "POST",
@@ -1129,6 +1447,7 @@ function setupEventListeners() {
     });
 
     closeSettings();
+    renderChartTradeMarkers();
     loadChartData(currentSymbol, currentTimeframe);
     alert("Settings saved successfully!");
   });

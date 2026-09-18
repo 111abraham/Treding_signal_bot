@@ -23,7 +23,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "min_risk_reward": 1.5,
         "atr_sl_multiplier": 1.5,
         "atr_tp_multiplier": 2.5,
-        "show_countdown_timers": True
+        "show_countdown_timers": True,
+        "show_chart_trade_markers": True
     },
     "telegram": {
         "enabled": False,
@@ -175,8 +176,10 @@ class ConfigManager:
                     merged["watchlist"].extend(missing_defaults)
                     needs_save = True
                 
-                if "scan_timeframes" not in merged or not merged["scan_timeframes"]:
-                    merged["scan_timeframes"] = DEFAULT_CONFIG["scan_timeframes"]
+                strat = DEFAULT_CONFIG["strategy"].copy()
+                strat.update(data.get("strategy", {}))
+                if strat != merged.get("strategy"):
+                    merged["strategy"] = strat
                     needs_save = True
 
                 if "timesfm" not in merged or not isinstance(merged["timesfm"], dict):

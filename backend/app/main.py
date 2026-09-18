@@ -102,6 +102,7 @@ class StrategySettingsRequest(BaseModel):
     auto_scan_enabled: Optional[bool] = None
     forecast_candles: Optional[int] = None
     show_countdown_timers: Optional[bool] = None
+    show_chart_trade_markers: Optional[bool] = None
     timesfm_enabled: Optional[bool] = None
     timesfm_conviction_boost: Optional[float] = None
     timesfm_suppress_on_conflict: Optional[bool] = None
@@ -234,6 +235,8 @@ async def get_chart_and_forecast(symbol: str, timeframe: Optional[str] = None):
         (t for t in outcome_tracker.active_trades if t["symbol"].upper() == symbol.upper() and t["timeframe"] == tf),
         None
     )
+    if active_trade:
+        active_trade = outcome_tracker._sanitize_trade(active_trade)
 
     return {
         "symbol": symbol,
@@ -342,6 +345,8 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         updates["forecast_candles"] = max(1, min(20, req.forecast_candles))
     if req.show_countdown_timers is not None:
         strat["show_countdown_timers"] = req.show_countdown_timers
+    if req.show_chart_trade_markers is not None:
+        strat["show_chart_trade_markers"] = req.show_chart_trade_markers
 
     updates["strategy"] = strat
     config_manager.update(updates)

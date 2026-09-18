@@ -27,6 +27,22 @@ class OutcomeTracker:
         self.closed_trades: List[Dict[str, Any]] = []
         self._load()
 
+    def _sanitize_trade(self, t: Dict[str, Any]) -> Dict[str, Any]:
+        sl_dist = float(t.get("sl_distance", 0.0))
+        entry = float(t.get("entry_price", 1.0))
+        if "estimated_spread" not in t or t.get("estimated_spread") is None:
+            t["estimated_spread"] = round(entry * 0.0002, 4)
+        if "spread_to_sl_ratio_pct" not in t or t.get("spread_to_sl_ratio_pct") is None:
+            if sl_dist > 0 and t["estimated_spread"] > 0:
+                t["spread_to_sl_ratio_pct"] = round((t["estimated_spread"] / sl_dist) * 100.0, 2)
+            else:
+                t["spread_to_sl_ratio_pct"] = 1.5
+        if "passes_spread_filter" not in t or t.get("passes_spread_filter") is None:
+            t["passes_spread_filter"] = t["spread_to_sl_ratio_pct"] <= 5.0
+        if "entry_candle_unix" not in t:
+            t["entry_candle_unix"] = t.get("opened_unix", int(datetime.datetime.now(datetime.timezone.utc).timestamp()))
+        return t
+
     def _load(self):
         if not self.storage_path.exists():
             self._save()
@@ -34,8 +50,10 @@ class OutcomeTracker:
         try:
             with open(self.storage_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                self.active_trades = data.get("active_trades", [])
-                self.closed_trades = data.get("closed_trades", [])
+                raw_active = data.get("active_trades", [])
+                raw_closed = data.get("closed_trades", [])
+                self.active_trades = [self._sanitize_trade(t) for t in raw_active]
+                self.closed_trades = [self._sanitize_trade(t) for t in raw_closed]
         except Exception as e:
             logger.warning(f"Error loading {self.storage_path}: {e}")
             self.active_trades = []
@@ -73,6 +91,24 @@ class OutcomeTracker:
         step_sec = int(signal.get("step_seconds", 3600))
         expires_at_unix = int(signal.get("expires_at_unix") or (candle_unix + (max_candles * step_sec)))
 
+        sl_dist = float(signal.get("sl_distance", 0.0))
+        entry_p = float(signal["entry_price"])
+        est_spread = float(signal.get("estimated_spread", 0.0))
+        if est_spread <= 0.0 and sl_dist > 0:
+            est_spread = round(entry_p * 0.0002, 4)
+
+        spread_ratio_pct = signal.get("spread_to_sl_ratio_pct")
+        if spread_ratio_pct is None:
+            spread_ratio_pct = round((est_spread / sl_dist) * 100.0, 2) if sl_dist > 0 else 1.5
+        else:
+            spread_ratio_pct = float(spread_ratio_pct)
+
+        passes_spread = signal.get("passes_spread_filter")
+        if passes_spread is None:
+            passes_spread = spread_ratio_pct <= 5.0
+        else:
+            passes_spread = bool(passes_spread)
+
         trade_entry = {
             "id": trade_id,
             "symbol": sym,
@@ -80,14 +116,23 @@ class OutcomeTracker:
             "category": signal.get("category", "General"),
             "timeframe": tf,
             "direction": signal["direction"],
-            "entry_price": float(signal["entry_price"]),
+            "entry_price": entry_p,
             "stop_loss": float(signal["stop_loss"]),
             "take_profit_1": float(signal["take_profit_1"]),
             "take_profit_2": float(signal.get("take_profit_2", signal["take_profit_1"])),
             "risk_reward_ratio": float(signal.get("risk_reward_ratio", 1.5)),
             "conviction": float(signal.get("conviction", 70.0)),
-            "sl_distance": float(signal.get("sl_distance", 0.0)),
+            "sl_distance": sl_dist,
             "tp_distance": float(signal.get("tp_distance", 0.0)),
+            "estimated_spread": est_spread,
+            "spread_to_sl_ratio_pct": spread_ratio_pct,
+            "passes_spread_filter": passes_spread,
+            "spread_source": signal.get("spread_source", "Calibrated Model"),
+            "dual_ai_confluence": bool(signal.get("dual_ai_confluence", False)),
+            "timesfm_return_pct": float(signal["timesfm_return_pct"]) if signal.get("timesfm_return_pct") is not None else None,
+            "timesfm_status": signal.get("timesfm_status"),
+            "timesfm_consensus": signal.get("timesfm_consensus"),
+            "timesfm_direction": signal.get("timesfm_direction"),
             "session_name": signal.get("session_name", "Market Session"),
             "opened_at": signal["timestamp"],
             "opened_candle_time": candle_time,
@@ -97,8 +142,8 @@ class OutcomeTracker:
             "max_candles": max_candles,
             "step_seconds": step_sec,
             "expires_at_unix": expires_at_unix,
-            "max_favorable_price": float(signal["entry_price"]),
-            "max_adverse_price": float(signal["entry_price"]),
+            "max_favorable_price": entry_p,
+            "max_adverse_price": entry_p,
             "status": "ACTIVE"
         }
 
@@ -152,6 +197,7 @@ class OutcomeTracker:
                 resolved_price = None
                 exit_reason = None
                 hit_candle_idx = 0
+                exit_candle_unix = None
 
                 # Check each subsequent candle for TP or SL hit
                 for idx, row in sub_df.iterrows():
@@ -159,6 +205,7 @@ class OutcomeTracker:
                     low = float(row["Low"])
                     c = float(row["Close"])
                     bar_num = idx + 1
+                    candle_ts = int(row["unix"])
 
                     if direction == "BULLISH":
                         # Track best and worst prices
@@ -171,6 +218,7 @@ class OutcomeTracker:
                             resolved_price = tp1
                             exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
                             hit_candle_idx = bar_num
+                            exit_candle_unix = candle_ts
                             break
                         # Did it hit Stop-Loss?
                         elif low <= sl:
@@ -178,6 +226,7 @@ class OutcomeTracker:
                             resolved_price = sl
                             exit_reason = f"Stop-Loss hit at {sl:.4f}"
                             hit_candle_idx = bar_num
+                            exit_candle_unix = candle_ts
                             break
 
                     else:  # BEARISH
@@ -189,12 +238,14 @@ class OutcomeTracker:
                             resolved_price = tp1
                             exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
                             hit_candle_idx = bar_num
+                            exit_candle_unix = candle_ts
                             break
                         elif high >= sl:
                             outcome = "LOSS"
                             resolved_price = sl
                             exit_reason = f"Stop-Loss hit at {sl:.4f}"
                             hit_candle_idx = bar_num
+                            exit_candle_unix = candle_ts
                             break
 
                 # If neither TP nor SL touched, check if max_candles have passed (Time Expiration)
@@ -204,6 +255,7 @@ class OutcomeTracker:
                     last_close = float(sub_df["Close"].iloc[idx_close])
                     resolved_price = last_close
                     hit_candle_idx = max_candles
+                    exit_candle_unix = int(sub_df["unix"].iloc[idx_close])
 
                     if direction == "BULLISH":
                         pnl = last_close - entry
@@ -223,6 +275,7 @@ class OutcomeTracker:
                 if outcome:
                     # Finalize resolved trade
                     closed_at_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    now_closed_unix = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
                     
                     # Calculate realized return % and R-multiple
                     if direction == "BULLISH":
@@ -235,6 +288,8 @@ class OutcomeTracker:
                     trade["status"] = "CLOSED"
                     trade["outcome"] = outcome
                     trade["closed_at"] = closed_at_str
+                    trade["closed_unix"] = now_closed_unix
+                    trade["exit_candle_unix"] = exit_candle_unix or now_closed_unix
                     trade["exit_price"] = round(resolved_price, 4)
                     trade["exit_reason"] = exit_reason
                     trade["hit_on_candle"] = hit_candle_idx

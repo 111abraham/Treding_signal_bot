@@ -300,6 +300,18 @@
               <button class="hist-tab" id="tabResolvedTrades">Outcomes (<span id="resolvedCountBadge">0</span>)</button>
             </div>
           </div>
+          <!-- TIMEFRAME SUB-FILTER BAR -->
+          <div class="sig-tf-filter-bar" id="signalsTfFilterBar">
+            <span class="tf-filter-label">Filter TF:</span>
+            <div class="sig-tf-tabs">
+              <button class="sig-tf-tab active" data-tf="ALL">ALL</button>
+              <button class="sig-tf-tab" data-tf="5m">5m</button>
+              <button class="sig-tf-tab" data-tf="15m">15m</button>
+              <button class="sig-tf-tab" data-tf="1h">1h</button>
+              <button class="sig-tf-tab" data-tf="4h">4h</button>
+              <button class="sig-tf-tab" data-tf="1d">1D</button>
+            </div>
+          </div>
           <div class="card-body scrollable-history" id="signalHistoryList">
             <div class="empty-history">No signals recorded yet. Click "Run Scan Now" to scan active watchlist.</div>
           </div>
@@ -379,6 +391,10 @@
               <div class="form-group toggle-group">
                 <label for="showCountdownTimers">Display Live Candle & Signal Countdown Timers</label>
                 <input type="checkbox" id="showCountdownTimers" checked />
+              </div>
+              <div class="form-group toggle-group">
+                <label for="showChartTradeMarkers">Display Trade History Indicators on Chart</label>
+                <input type="checkbox" id="showChartTradeMarkers" checked />
               </div>
               <div class="form-group toggle-group">
                 <label for="autoScanEnabled">Enable Automated Background Scanning</label>
