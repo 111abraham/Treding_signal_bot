@@ -69,6 +69,10 @@ class OutcomeTracker:
             if t["id"] == trade_id:
                 return False
 
+        max_candles = int(signal.get("max_candles", 5))
+        step_sec = int(signal.get("step_seconds", 3600))
+        expires_at_unix = int(signal.get("expires_at_unix") or (candle_unix + (max_candles * step_sec)))
+
         trade_entry = {
             "id": trade_id,
             "symbol": sym,
@@ -90,6 +94,9 @@ class OutcomeTracker:
             "entry_candle_unix": candle_unix,
             "opened_unix": int(datetime.datetime.now(datetime.timezone.utc).timestamp()),
             "candles_monitored": 0,
+            "max_candles": max_candles,
+            "step_seconds": step_sec,
+            "expires_at_unix": expires_at_unix,
             "max_favorable_price": float(signal["entry_price"]),
             "max_adverse_price": float(signal["entry_price"]),
             "status": "ACTIVE"
@@ -190,11 +197,13 @@ class OutcomeTracker:
                             hit_candle_idx = bar_num
                             break
 
-                # If neither TP nor SL touched, check if 5 candles have passed (Time Expiration)
-                if outcome is None and candles_elapsed >= 5:
-                    last_close = float(sub_df["Close"].iloc[4] if len(sub_df) >= 5 else sub_df["Close"].iloc[-1])
+                # If neither TP nor SL touched, check if max_candles have passed (Time Expiration)
+                max_candles = int(trade.get("max_candles", 5))
+                if outcome is None and candles_elapsed >= max_candles:
+                    idx_close = max_candles - 1 if len(sub_df) >= max_candles else -1
+                    last_close = float(sub_df["Close"].iloc[idx_close])
                     resolved_price = last_close
-                    hit_candle_idx = 5
+                    hit_candle_idx = max_candles
 
                     if direction == "BULLISH":
                         pnl = last_close - entry
@@ -203,13 +212,13 @@ class OutcomeTracker:
 
                     if pnl > 0.0001:
                         outcome = "EXPIRED_PROFIT"
-                        exit_reason = f"5-Candle Time Expiration (Closed in Profit at {last_close:.4f})"
+                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Profit at {last_close:.4f})"
                     elif pnl < -0.0001:
                         outcome = "EXPIRED_LOSS"
-                        exit_reason = f"5-Candle Time Expiration (Closed in Drawdown at {last_close:.4f})"
+                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Drawdown at {last_close:.4f})"
                     else:
                         outcome = "EXPIRED_BREAKEVEN"
-                        exit_reason = f"5-Candle Time Expiration (Closed at Breakeven at {last_close:.4f})"
+                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed at Breakeven at {last_close:.4f})"
 
                 if outcome:
                     # Finalize resolved trade
@@ -265,7 +274,8 @@ class OutcomeTracker:
             badge = f"⚖️ <b>{outcome.replace('_', ' ')}</b>"
 
         pnl_str = f"{trade['realized_pnl_pct']:+0.2f}% ({trade['realized_r']:+0.2f}R)"
-        duration_str = f"Candle {trade['hit_on_candle']} of 5"
+        max_c = int(trade.get("max_candles", 5))
+        duration_str = f"Candle {trade['hit_on_candle']} of {max_c}"
 
         stats = self.get_statistics()
         win_rate = stats.get("win_rate_pct", 0.0)
@@ -354,9 +364,27 @@ class OutcomeTracker:
         }
 
     def get_trades_log(self, limit: int = 50) -> Dict[str, Any]:
-        """Returns recent active and closed trades."""
+        """Returns recent active and closed trades enriched with dynamic countdown metrics."""
+        now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+        step_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
+        
+        enriched_active = []
+        for t in self.active_trades:
+            t_copy = dict(t)
+            max_c = int(t_copy.get("max_candles", 5))
+            mon = int(t_copy.get("candles_monitored", 0))
+            t_copy["candles_remaining"] = max(0, max_c - mon)
+            
+            tf = t_copy.get("timeframe", "1h").lower()
+            step_sec = t_copy.get("step_seconds") or step_map.get(tf, 3600)
+            entry_unix = t_copy.get("entry_candle_unix") or t_copy.get("opened_unix", now_ts)
+            exp_unix = t_copy.get("expires_at_unix") or (entry_unix + (max_c * step_sec))
+            t_copy["expires_at_unix"] = exp_unix
+            t_copy["seconds_remaining"] = max(0, exp_unix - now_ts)
+            enriched_active.append(t_copy)
+
         return {
-            "active": self.active_trades,
+            "active": enriched_active,
             "closed": self.closed_trades[:limit],
             "stats": self.get_statistics()
         }

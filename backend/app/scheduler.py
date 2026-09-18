@@ -84,8 +84,9 @@ class ScanEngine:
                         
                         df.attrs["symbol"] = sym
 
-                        # 2. Run AI 5-step forecast
-                        forecast = ai_engine.forecast_next_5(df, interval=tf, prediction_length=5)
+                        # 2. Run AI multi-step forecast
+                        forecast_len = int(cfg.get("forecast_candles", 5))
+                        forecast = ai_engine.forecast_next_5(df, interval=tf, prediction_length=forecast_len)
                         self.latest_forecasts[f"{sym}_{tf}"] = forecast
 
                         # 3. Evaluate trading setup & spread filters

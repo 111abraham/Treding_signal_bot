@@ -22,7 +22,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "min_conviction": 65.0,  # Minimum confidence score % (0-100)
         "min_risk_reward": 1.5,
         "atr_sl_multiplier": 1.5,
-        "atr_tp_multiplier": 2.5
+        "atr_tp_multiplier": 2.5,
+        "show_countdown_timers": True
     },
     "telegram": {
         "enabled": False,

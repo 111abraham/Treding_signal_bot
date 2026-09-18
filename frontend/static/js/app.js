@@ -17,6 +17,10 @@ let currentTimeframe = "1h";
 let currentCategory = "ALL";
 let watchlistData = [];
 let scanPollInterval = null;
+let activeTradesData = [];
+let showCountdownTimers = true;
+let currentForecastCandles = 5;
+let currentActiveSignal = null;
 
 // DOM Elements
 const chartContainer = document.getElementById("tradingviewChart");
@@ -38,6 +42,16 @@ const deviceText = document.getElementById("deviceText");
 const watchlistContainer = document.getElementById("watchlistContainer");
 const signalHistoryList = document.getElementById("signalHistoryList");
 const signalCountBadge = document.getElementById("signalCountBadge");
+
+// Candle Countdown & Lifespan Elements
+const candleTimerBadge = document.getElementById("candleTimerBadge");
+const candleTimerText = document.getElementById("candleTimerText");
+const lifespanPill = document.getElementById("lifespanPill");
+const lifespanPillLabel = document.getElementById("lifespanPillLabel");
+const lifespanPillValue = document.getElementById("lifespanPillValue");
+const rowSignalLifespan = document.getElementById("rowSignalLifespan");
+const lvlSignalRemaining = document.getElementById("lvlSignalRemaining");
+const lifespanSegments = document.getElementById("lifespanSegments");
 
 // Guardrail DOM Elements
 const currentSpreadRatio = document.getElementById("currentSpreadRatio");
@@ -94,10 +108,175 @@ const btnCancelAddAsset = document.getElementById("btnCancelAddAsset");
 const addAssetForm = document.getElementById("addAssetForm");
 
 
+// Utility: Format Seconds into Human-Readable Countdown
+function formatRemainingDuration(seconds) {
+  if (seconds <= 0) return "0s";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s < 10 ? "0" : ""}${s}s`;
+  return `${s}s`;
+}
+
+// Utility: Timeframe Duration in Seconds
+function getTimeframeSeconds(tf) {
+  const map = {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "4h": 14400,
+    "1d": 86400,
+  };
+  return map[(tf || "").toLowerCase()] || 3600;
+}
+
+// Live Countdown Engine for Active Chart Signal Lifespan
+function updateActiveSignalLifespanClock(nowSec, tfSec) {
+  if (!showCountdownTimers) {
+    if (lifespanPill) lifespanPill.style.display = "none";
+    if (rowSignalLifespan) rowSignalLifespan.style.display = "none";
+    return;
+  }
+
+  if (lifespanPill) lifespanPill.style.display = "flex";
+  if (rowSignalLifespan) rowSignalLifespan.style.display = currentActiveSignal ? "flex" : "none";
+
+  if (!currentActiveSignal) return;
+
+  nowSec = nowSec || Math.floor(Date.now() / 1000);
+  tfSec = tfSec || getTimeframeSeconds(currentTimeframe);
+
+  const activeTrade = activeTradesData.find(
+    (t) => t.symbol.toUpperCase() === currentSymbol.toUpperCase() && t.timeframe === currentTimeframe
+  );
+
+  let maxBars = currentActiveSignal.max_candles || currentForecastCandles || 5;
+  let elapsedBars = 0;
+  let remainingBars = maxBars;
+  let secLeft = maxBars * tfSec;
+
+  if (activeTrade) {
+    maxBars = activeTrade.max_candles || maxBars;
+    elapsedBars = activeTrade.candles_monitored || 0;
+    remainingBars = Math.max(0, maxBars - elapsedBars);
+    const expUnix = activeTrade.expires_at_unix || ((activeTrade.entry_candle_unix || activeTrade.opened_unix) + (maxBars * tfSec));
+    secLeft = Math.max(0, expUnix - nowSec);
+  } else {
+    const nextBoundary = Math.ceil(nowSec / tfSec) * tfSec;
+    const curCandleRemaining = Math.max(0, nextBoundary - nowSec);
+    secLeft = curCandleRemaining + Math.max(0, maxBars - 1) * tfSec;
+  }
+
+  // Render Lifespan Segments
+  if (lifespanSegments) {
+    lifespanSegments.innerHTML = "";
+    for (let i = 0; i < maxBars; i++) {
+      const seg = document.createElement("span");
+      seg.className = "lifespan-segment";
+      if (i < elapsedBars) {
+        seg.classList.add("elapsed");
+        seg.title = `Bar ${i + 1} completed`;
+      } else {
+        seg.classList.add("active");
+        if (remainingBars === 1) seg.classList.add("danger");
+        seg.title = `Bar ${i + 1} remaining`;
+      }
+      lifespanSegments.appendChild(seg);
+    }
+  }
+
+  const durStr = formatRemainingDuration(secLeft);
+  if (lvlSignalRemaining) {
+    if (activeTrade) {
+      lvlSignalRemaining.textContent = `⏳ ${remainingBars} of ${maxBars} bars left (~${durStr})`;
+    } else {
+      lvlSignalRemaining.textContent = `⏳ ${maxBars} bars horizon (~${durStr})`;
+    }
+  }
+
+  if (lifespanPillValue) {
+    if (activeTrade) {
+      lifespanPillValue.textContent = `⏳ ${remainingBars}/${maxBars} Bars (${durStr})`;
+    } else {
+      lifespanPillValue.textContent = `⏳ ${maxBars} Bars (~${durStr})`;
+    }
+  }
+}
+
+// 1-Second Live Countdown Engine (Client-Side, 0 Server Overhead)
+function startLiveCountdownEngine() {
+  setInterval(() => {
+    if (!showCountdownTimers) {
+      if (candleTimerBadge) candleTimerBadge.style.display = "none";
+      if (lifespanPill) lifespanPill.style.display = "none";
+      if (rowSignalLifespan) rowSignalLifespan.style.display = "none";
+      document.querySelectorAll(".sig-countdown").forEach((el) => (el.style.display = "none"));
+      return;
+    } else {
+      if (candleTimerBadge) candleTimerBadge.style.display = "flex";
+      document.querySelectorAll(".sig-countdown").forEach((el) => (el.style.display = "inline-block"));
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const tfSec = getTimeframeSeconds(currentTimeframe);
+
+    // 1. Current Candle Close Timer
+    const nextCandleBoundary = Math.ceil(nowSec / tfSec) * tfSec;
+    const candleSecLeft = Math.max(0, nextCandleBoundary - nowSec);
+    if (candleTimerText) {
+      const cm = Math.floor(candleSecLeft / 60);
+      const cs = candleSecLeft % 60;
+      if (candleSecLeft >= 3600) {
+        const ch = Math.floor(candleSecLeft / 3600);
+        candleTimerText.textContent = `${ch}h ${cm % 60}m`;
+      } else {
+        candleTimerText.textContent = `${cm < 10 ? "0" : ""}${cm}:${cs < 10 ? "0" : ""}${cs}`;
+      }
+      if (candleTimerBadge) {
+        if (candleSecLeft < 60 && tfSec <= 900) {
+          candleTimerBadge.classList.add("closing-soon");
+        } else {
+          candleTimerBadge.classList.remove("closing-soon");
+        }
+      }
+    }
+
+    // 2. Active Chart Signal Lifespan
+    updateActiveSignalLifespanClock(nowSec, tfSec);
+
+    // 3. Signal list cards countdown
+    document.querySelectorAll(".sig-countdown").forEach((el) => {
+      const entryUnix = parseInt(el.dataset.entry, 10);
+      const tf = el.dataset.tf || "1h";
+      const maxC = parseInt(el.dataset.max, 10) || currentForecastCandles || 5;
+      const step = getTimeframeSeconds(tf);
+      if (!entryUnix) return;
+
+      const expUnix = entryUnix + maxC * step;
+      const secLeft = expUnix - nowSec;
+      if (secLeft <= 0) {
+        el.textContent = `⏱️ Finished (${maxC} bars)`;
+        el.className = "sig-countdown completed";
+      } else {
+        const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
+        const remBars = Math.max(0, maxC - elapsedBars);
+        el.textContent = `⏳ ${remBars}/${maxC} bars (${formatRemainingDuration(secLeft)} left)`;
+        el.className = "sig-countdown";
+      }
+    });
+  }, 1000);
+}
+
 // Initialize Application
 document.addEventListener("DOMContentLoaded", async () => {
   initChart();
   setupEventListeners();
+  startLiveCountdownEngine();
   await loadStatus();
   await loadWatchlist();
   await loadSignals();
@@ -231,6 +410,13 @@ async function loadChartData(symbol, timeframe) {
       chart.timeScale().fitContent();
     }
 
+    currentActiveSignal = data.signal;
+
+    // Update Direction Pill Dynamic Horizon Label (e.g. 5-Candle Direction)
+    const maxBars = data.signal?.max_candles || data.forecast?.predicted_candles?.length || currentForecastCandles || 5;
+    const dirPillLabel = document.querySelector("#directionPill .pill-label");
+    if (dirPillLabel) dirPillLabel.textContent = `${maxBars}-Candle Direction`;
+
     // Update Forecast Pills
     updateForecastPills(data.forecast, data.signal);
 
@@ -338,6 +524,9 @@ function updateForecastPills(forecast, signal) {
       timesfmPill.style.display = "none";
     }
   }
+
+  // Update Lifespan Clock and Segments
+  updateActiveSignalLifespanClock();
 }
 
 function updateGuardrailsAndLevels(signal, currentClose) {
@@ -348,6 +537,7 @@ function updateGuardrailsAndLevels(signal, currentClose) {
     lvlTP2.textContent = "--";
     lvlRR.textContent = "--";
     if (rowDualAi) rowDualAi.style.display = "none";
+    if (rowSignalLifespan) rowSignalLifespan.style.display = "none";
     currentSpreadRatio.textContent = "--";
     spreadMeterFill.style.width = "0%";
     spreadStatusPill.className = "guardrail-status-pill";
@@ -371,6 +561,12 @@ function updateGuardrailsAndLevels(signal, currentClose) {
       rowDualAi.style.display = "none";
     }
   }
+
+  // Lifespan row display
+  if (rowSignalLifespan) {
+    rowSignalLifespan.style.display = showCountdownTimers ? "flex" : "none";
+  }
+  updateActiveSignalLifespanClock();
 
   // Draw Price Lines on Chart
   clearPriceLines();
@@ -567,6 +763,21 @@ async function loadSignals() {
 
       const dualBadge = sig.dual_ai_confluence ? `<span class="sig-badge-dual">🤖 DUAL AI</span>` : "";
 
+      const maxC = sig.max_candles || currentForecastCandles || 5;
+      const step = getTimeframeSeconds(sig.timeframe);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const entryUnix = sig.candle_unix || Math.floor(new Date(sig.timestamp).getTime() / 1000) || nowSec;
+      const expUnix = sig.expires_at_unix || (entryUnix + maxC * step);
+      const secLeft = Math.max(0, expUnix - nowSec);
+      const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
+      const remBars = Math.max(0, maxC - elapsedBars);
+
+      const countdownHtml = showCountdownTimers
+        ? (secLeft <= 0
+            ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC} bars)</span>`
+            : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ ${remBars}/${maxC} bars (${formatRemainingDuration(secLeft)} left)</span>`)
+        : "";
+
       card.innerHTML = `
         <div class="sig-header">
           <span class="sig-sym">${sig.symbol} <small style="color:var(--text-muted);font-weight:normal">${sig.timeframe}</small></span>
@@ -579,7 +790,10 @@ async function loadSignals() {
           <span>Entry: ${sig.entry_price}</span>
           <span>R:R ${sig.risk_reward_ratio}</span>
         </div>
-        <div class="sig-time">${sig.timestamp.split(" ")[1]} UTC | ${sig.session_name.split(" ")[0]}</div>
+        <div class="sig-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+          <div class="sig-time">${sig.timestamp.split(" ")[1]} UTC | ${sig.session_name.split(" ")[0]}</div>
+          ${countdownHtml}
+        </div>
       `;
 
       card.addEventListener("click", () => {
@@ -601,6 +815,8 @@ async function loadPerformance() {
     const stats = data.stats || {};
     const closedTrades = data.closed_trades || [];
     const activeTrades = data.active_trades || [];
+    activeTradesData = activeTrades;
+    updateActiveSignalLifespanClock();
 
     // Update summary metrics
     if (statWinRate) {
@@ -814,6 +1030,8 @@ function setupEventListeners() {
       document.getElementById("minConviction").value = cfg.strategy?.min_conviction || 65;
       document.getElementById("scanInterval").value = cfg.scan_interval_minutes || 15;
       document.getElementById("autoScanEnabled").checked = cfg.auto_scan_enabled !== false;
+      document.getElementById("forecastCandles").value = cfg.forecast_candles || 5;
+      document.getElementById("showCountdownTimers").checked = cfg.strategy?.show_countdown_timers !== false;
 
       // Populate multi-timeframe checkboxes
       const savedTfs = cfg.scan_timeframes || ["5m", "15m", "1h", "4h"];
@@ -856,10 +1074,15 @@ function setupEventListeners() {
       scan_interval_minutes: parseInt(document.getElementById("scanInterval").value),
       auto_scan_enabled: document.getElementById("autoScanEnabled").checked,
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
+      forecast_candles: parseInt(document.getElementById("forecastCandles").value) || 5,
+      show_countdown_timers: document.getElementById("showCountdownTimers").checked,
       timesfm_enabled: document.getElementById("timesfmEnabled")?.checked !== false,
       timesfm_suppress_on_conflict: document.getElementById("timesfmSuppressConflict")?.checked === true,
       timesfm_conviction_boost: parseFloat(document.getElementById("timesfmBoost")?.value || 12),
     };
+
+    currentForecastCandles = stratData.forecast_candles;
+    showCountdownTimers = stratData.show_countdown_timers;
 
     await fetch("/api/settings/telegram", {
       method: "POST",
@@ -874,6 +1097,7 @@ function setupEventListeners() {
     });
 
     closeSettings();
+    loadChartData(currentSymbol, currentTimeframe);
     alert("Settings saved successfully!");
   });
 

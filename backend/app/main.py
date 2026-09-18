@@ -100,6 +100,8 @@ class StrategySettingsRequest(BaseModel):
     min_conviction: Optional[float] = None
     scan_interval_minutes: Optional[int] = None
     auto_scan_enabled: Optional[bool] = None
+    forecast_candles: Optional[int] = None
+    show_countdown_timers: Optional[bool] = None
     timesfm_enabled: Optional[bool] = None
     timesfm_conviction_boost: Optional[float] = None
     timesfm_suppress_on_conflict: Optional[bool] = None
@@ -204,8 +206,9 @@ async def get_chart_and_forecast(symbol: str, timeframe: Optional[str] = None):
     # 2. Convert historical to TradingView format
     historical_candles = MarketDataFetcher.format_for_tradingview(df)
 
-    # 3. Generate 5-step AI forecast
-    forecast = ai_engine.forecast_next_5(df, interval=tf, prediction_length=5)
+    # 3. Generate AI forecast with configurable horizon length
+    forecast_len = int(config_manager.get("forecast_candles", 5))
+    forecast = ai_engine.forecast_next_5(df, interval=tf, prediction_length=forecast_len)
 
     # 4. Find asset config for spread & evaluation
     watchlist = config_manager.get_watchlist()
@@ -328,6 +331,10 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         strat["require_london_ny_overlap"] = req.require_london_ny_overlap
     if req.min_conviction is not None:
         strat["min_conviction"] = req.min_conviction
+    if req.forecast_candles is not None:
+        updates["forecast_candles"] = max(1, min(20, req.forecast_candles))
+    if req.show_countdown_timers is not None:
+        strat["show_countdown_timers"] = req.show_countdown_timers
 
     updates["strategy"] = strat
     config_manager.update(updates)

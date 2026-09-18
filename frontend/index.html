@@ -50,6 +50,10 @@
             <option value="4h">4h (Swing)</option>
             <option value="1d">1D (Daily)</option>
           </select>
+          <div class="metric-badge candle-timer-badge" id="candleTimerBadge" title="Remaining time until current candle closes">
+            <span class="pulse-dot-timer"></span>
+            <span id="candleTimerText">--:--</span>
+          </div>
         </div>
 
         <button id="btnScanNow" class="btn btn-primary">
@@ -128,6 +132,10 @@
             <div class="summary-pill" id="timesfmPill" style="display:none;">
               <span class="pill-label">TimesFM Arbiter</span>
               <span class="pill-val" id="timesfmValue">--</span>
+            </div>
+            <div class="summary-pill" id="lifespanPill">
+              <span class="pill-label" id="lifespanPillLabel">Signal Horizon</span>
+              <span class="pill-val" id="lifespanPillValue">⏳ 5 Bars</span>
             </div>
           </div>
         </div>
@@ -227,6 +235,15 @@
             <div class="level-row dual-ai-row" id="rowDualAi" style="display: none;">
               <span class="lvl-label">Dual AI Arbiter</span>
               <span class="lvl-val" id="lvlDualAi">🤖 Confirmed</span>
+            </div>
+            <div class="level-row lifespan-row" id="rowSignalLifespan">
+              <span class="lvl-label">Signal Lifespan</span>
+              <div class="lifespan-info-box">
+                <span class="lvl-val" id="lvlSignalRemaining">⏳ 5 of 5 bars left</span>
+                <div class="lifespan-segments" id="lifespanSegments" title="Bars remaining before signal finishes">
+                  <!-- Generated dynamically -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -353,6 +370,15 @@
                   <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="1d" /> 1D (Daily)</label>
                 </div>
                 <small>Select all timeframes the background AI engine will scan across your watchlist.</small>
+              </div>
+              <div class="form-group">
+                <label for="forecastCandles">Forecast Horizon / Signal Lifespan (Candles)</label>
+                <input type="number" id="forecastCandles" min="1" max="20" value="5" />
+                <small>Number of future candles forecasted and monitored for TP/SL before expiration (Default: 5). Cleanly adjust this as you experiment.</small>
+              </div>
+              <div class="form-group toggle-group">
+                <label for="showCountdownTimers">Display Live Candle & Signal Countdown Timers</label>
+                <input type="checkbox" id="showCountdownTimers" checked />
               </div>
               <div class="form-group toggle-group">
                 <label for="autoScanEnabled">Enable Automated Background Scanning</label>

@@ -1238,3 +1238,93 @@ body {
   animation: pulse 2s infinite;
 }
 
+/* Candle Countdown Badge in Top Nav */
+.metric-badge.candle-timer-badge {
+  background-color: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.25);
+  color: var(--accent-cyan);
+  padding: 3px 8px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.metric-badge.candle-timer-badge.closing-soon {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--accent-red);
+  animation: timerPulse 1s infinite alternate;
+}
+
+@keyframes timerPulse {
+  0% { background-color: rgba(239, 68, 68, 0.08); }
+  100% { background-color: rgba(239, 68, 68, 0.2); }
+}
+
+.pulse-dot-timer {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+  display: inline-block;
+}
+
+/* Signal Lifespan in Trade Setup Levels */
+.level-row.lifespan-row {
+  align-items: flex-start;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.lifespan-info-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.lifespan-segments {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.lifespan-segment {
+  width: 14px;
+  height: 5px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.12);
+  transition: all 0.3s ease;
+}
+
+.lifespan-segment.active {
+  background-color: var(--accent-cyan);
+  box-shadow: 0 0 4px rgba(0, 242, 254, 0.4);
+}
+
+.lifespan-segment.elapsed {
+  background-color: rgba(148, 163, 184, 0.25);
+}
+
+.lifespan-segment.danger {
+  background-color: #ef4444;
+}
+
+/* Signal Card Countdown Pill */
+.sig-countdown {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.sig-countdown.completed {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+

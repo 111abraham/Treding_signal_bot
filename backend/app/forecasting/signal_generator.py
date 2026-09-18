@@ -157,6 +157,20 @@ class SignalGenerator:
         except Exception:
             candle_unix = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
 
+        tf = forecast_result.get("timeframe", "1h")
+        step_seconds_map = {
+            "1m": 60,
+            "5m": 5 * 60,
+            "15m": 15 * 60,
+            "30m": 30 * 60,
+            "1h": 60 * 60,
+            "4h": 4 * 60 * 60,
+            "1d": 24 * 60 * 60
+        }
+        step_seconds = step_seconds_map.get(tf.lower(), 3600)
+        max_candles = len(pred_candles) if pred_candles else strategy_config.get("forecast_candles", 5)
+        expires_at_unix = candle_unix + (max_candles * step_seconds)
+
         return {
             "symbol": symbol,
             "name": name,
@@ -164,7 +178,10 @@ class SignalGenerator:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "candle_time": candle_time_str,
             "candle_unix": candle_unix,
-            "timeframe": forecast_result.get("timeframe", "1h"),
+            "timeframe": tf,
+            "max_candles": max_candles,
+            "step_seconds": step_seconds,
+            "expires_at_unix": expires_at_unix,
             "direction": direction,
             "current_price": current_price,
             "entry_price": entry_price,
