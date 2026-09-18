@@ -1454,8 +1454,12 @@ function setupEventListeners() {
       a.download = `trade_history${tfSuffix}_${ts}.${ext}`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } catch (err) {}
+      }, 250);
       if (exportModal) exportModal.style.display = "none";
     } catch (e) {
       console.error("Export error:", e);
@@ -1475,6 +1479,14 @@ function setupEventListeners() {
         downloadExportFile("json", null);
       }
     });
+
+    if (exportModal) {
+      exportModal.addEventListener("click", (e) => {
+        if (e.target === exportModal) {
+          exportModal.style.display = "none";
+        }
+      });
+    }
 
     if (btnCloseExportModal && exportModal) {
       btnCloseExportModal.addEventListener("click", () => {
