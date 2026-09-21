@@ -1734,6 +1734,104 @@ function setupEventListeners() {
     setWatchlistCollapsed(true);
   }
 
+  // -------------------------------------------------------------
+  // Draggable Splitter: Drag from Right to Left to Expand Sidebar
+  // -------------------------------------------------------------
+  function initSidebarResizer() {
+    const resizer = document.getElementById("rightSidebarResizer");
+    if (!resizer || !terminalBody) return;
+
+    // Restore saved width from localStorage if present
+    const savedWidth = localStorage.getItem("signalSidebarWidth");
+    if (savedWidth) {
+      const parsed = parseInt(savedWidth, 10);
+      if (!isNaN(parsed) && parsed >= 260 && parsed <= window.innerWidth * 0.7) {
+        document.documentElement.style.setProperty("--signal-sidebar-width", `${parsed}px`);
+      }
+    }
+
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 310;
+
+    resizer.addEventListener("pointerdown", (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      resizer.setPointerCapture(e.pointerId);
+
+      const currentWidthStr = getComputedStyle(document.documentElement).getPropertyValue("--signal-sidebar-width").trim();
+      startWidth = parseInt(currentWidthStr, 10) || 310;
+
+      resizer.classList.add("resizing");
+      document.body.classList.add("col-resizing");
+      e.preventDefault();
+    });
+
+    resizer.addEventListener("pointermove", (e) => {
+      if (!isDragging) return;
+
+      // Dragging right-to-left (startX - e.clientX) increases width
+      const deltaX = startX - e.clientX;
+      const minW = 260;
+      const maxW = Math.max(minW, Math.floor(window.innerWidth * 0.65));
+      const newWidth = Math.min(maxW, Math.max(minW, startWidth + deltaX));
+
+      document.documentElement.style.setProperty("--signal-sidebar-width", `${newWidth}px`);
+
+      if (chart && chartContainer) {
+        requestAnimationFrame(() => {
+          chart.applyOptions({
+            width: chartContainer.clientWidth,
+            height: chartContainer.clientHeight,
+          });
+        });
+      }
+    });
+
+    function stopDrag(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      try {
+        resizer.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+
+      resizer.classList.remove("resizing");
+      document.body.classList.remove("col-resizing");
+
+      const finalWidthStr = getComputedStyle(document.documentElement).getPropertyValue("--signal-sidebar-width").trim();
+      localStorage.setItem("signalSidebarWidth", finalWidthStr);
+
+      if (chart && chartContainer) {
+        chart.applyOptions({
+          width: chartContainer.clientWidth,
+          height: chartContainer.clientHeight,
+        });
+      }
+    }
+
+    resizer.addEventListener("pointerup", stopDrag);
+    resizer.addEventListener("pointercancel", stopDrag);
+
+    // Double-click to toggle between standard width (310px) and wide view (460px)
+    resizer.addEventListener("dblclick", () => {
+      const currentWidthStr = getComputedStyle(document.documentElement).getPropertyValue("--signal-sidebar-width").trim();
+      const currW = parseInt(currentWidthStr, 10) || 310;
+      const targetW = currW > 360 ? 310 : 460;
+      document.documentElement.style.setProperty("--signal-sidebar-width", `${targetW}px`);
+      localStorage.setItem("signalSidebarWidth", `${targetW}px`);
+      if (chart && chartContainer) {
+        setTimeout(() => {
+          chart.applyOptions({
+            width: chartContainer.clientWidth,
+            height: chartContainer.clientHeight,
+          });
+        }, 60);
+      }
+    });
+  }
+
+  initSidebarResizer();
+
   // Download helper for CSV / JSON export
   async function downloadExportFile(format, tf = null) {
     try {

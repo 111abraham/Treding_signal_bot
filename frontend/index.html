@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=3.5" />
+  <link rel="stylesheet" href="/static/css/style.css?v=4.0" />
   <!-- TradingView Lightweight Charts CDN -->
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -184,8 +184,13 @@
         </div>
       </section>
 
+      <!-- DRAGGABLE SPLITTER RESIZER (DRAG FROM RIGHT TO LEFT TO EXPAND) -->
+      <div class="sidebar-resizer" id="rightSidebarResizer" title="Drag left/right to resize sidebar (Double-click to toggle wide/compact)">
+        <div class="resizer-handle-line"></div>
+      </div>
+
       <!-- RIGHT SIDEBAR: SIGNAL METRICS & GUARDRAILS -->
-      <aside class="signal-sidebar">
+      <aside class="signal-sidebar" id="signalSidebar">
         <!-- SPREAD & SL GUARDRAIL CARD -->
         <div class="card guardrail-card">
           <div class="card-header">
@@ -658,6 +663,6 @@
 
   </div>
 
-  <script src="/static/js/app.js?v=3.5"></script>
+  <script src="/static/js/app.js?v=4.0"></script>
 </body>
 </html>
