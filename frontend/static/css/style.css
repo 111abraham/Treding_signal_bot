@@ -34,55 +34,67 @@ body {
   font-size: 14px;
   line-height: 1.5;
   height: 100vh;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
 }
 
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
+  min-width: 0;
 }
 
 /* TOP NAVBAR */
 .top-nav {
-  height: 56px;
+  min-height: 52px;
+  height: 52px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   flex-shrink: 0;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .brand-logo {
-  font-size: 22px;
+  font-size: 20px;
   filter: drop-shadow(0 0 8px var(--accent-cyan));
 }
 
 .brand-info h1 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .brand-info .subtext {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .session-status-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .metric-badge {
@@ -121,7 +133,8 @@ body {
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .timeframe-selector {
@@ -198,12 +211,21 @@ body {
 /* TERMINAL BODY LAYOUT */
 .terminal-body {
   display: grid;
-  grid-template-columns: 260px minmax(350px, 1fr) 330px;
+  grid-template-columns: 230px minmax(0, 1fr) 310px;
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  width: 100%;
+  overflow: hidden;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.terminal-body.watchlist-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr) 310px;
+}
+
+.terminal-body.watchlist-collapsed .sidebar {
+  display: none !important;
 }
 
 /* SIDEBAR: WATCHLIST */
@@ -215,6 +237,7 @@ body {
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  width: 230px;
 }
 
 .sidebar-header {
@@ -379,20 +402,23 @@ body {
 }
 
 .chart-header {
-  padding: 10px 16px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .asset-details {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .symbol-title {
@@ -400,13 +426,13 @@ body {
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-main);
 }
 
 .symbol-title .asset-name {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
   font-weight: 400;
 }
@@ -415,6 +441,9 @@ body {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 3px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.3px;
   background-color: rgba(0, 242, 254, 0.1);
   color: var(--accent-cyan);
   border: 1px solid rgba(0, 242, 254, 0.2);
@@ -426,22 +455,23 @@ body {
 }
 
 .live-price-box .label {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
 .live-price-box .value {
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #fff;
 }
 
 .forecast-summary-pills {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .summary-pill {
@@ -449,19 +479,19 @@ body {
   flex-direction: column;
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  padding: 4px 10px;
-  border-radius: 6px;
-  min-width: 85px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  min-width: 75px;
 }
 
 .summary-pill .pill-label {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
 }
 
 .summary-pill .pill-val {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -481,19 +511,24 @@ body {
 .htf-radar-bar {
   background-color: #0d121c;
   border-bottom: 1px solid var(--border-color);
-  padding: 6px 18px;
+  padding: 4px 12px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   font-size: 11px;
   font-family: var(--font-mono);
-  min-height: 36px;
+  min-height: 32px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .htf-left {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .htf-label {
@@ -601,15 +636,18 @@ body {
 }
 
 .chart-footer-legend {
-  height: 36px;
+  min-height: 30px;
+  height: auto;
   background-color: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
-  padding: 0 16px;
+  gap: 12px;
+  padding: 4px 12px;
   font-size: 11px;
   color: var(--text-secondary);
+  min-width: 0;
 }
 
 .legend-item {
@@ -636,12 +674,15 @@ body {
   border-left: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  gap: 10px;
+  padding: 10px;
+  padding-bottom: 24px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   min-height: 0;
-  min-width: 0;
+  width: 310px;
+  min-width: 280px;
+  flex-shrink: 0;
   height: 100%;
   max-height: 100%;
   overscroll-behavior: contain;
@@ -653,6 +694,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .card-header {
@@ -1624,27 +1666,29 @@ body {
 .signal-sidebar::-webkit-scrollbar,
 .watchlist-list::-webkit-scrollbar,
 .terminal-body::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 .signal-sidebar::-webkit-scrollbar-track,
 .watchlist-list::-webkit-scrollbar-track,
 .terminal-body::-webkit-scrollbar-track {
-  background: rgba(10, 13, 20, 0.4);
+  background: rgba(10, 13, 20, 0.7);
+  border-radius: 4px;
 }
 
 .signal-sidebar::-webkit-scrollbar-thumb,
 .watchlist-list::-webkit-scrollbar-thumb,
 .terminal-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 242, 254, 0.25);
-  border-radius: 3px;
+  background: rgba(0, 242, 254, 0.5);
+  border-radius: 4px;
+  border: 1px solid rgba(0, 242, 254, 0.2);
 }
 
 .signal-sidebar::-webkit-scrollbar-thumb:hover,
 .watchlist-list::-webkit-scrollbar-thumb:hover,
 .terminal-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 242, 254, 0.5);
+  background: rgba(0, 242, 254, 0.85);
 }
 
 /* Firefox scrollbar support */
@@ -1652,33 +1696,62 @@ body {
 .watchlist-list,
 .terminal-body {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 242, 254, 0.25) rgba(10, 13, 20, 0.4);
+  scrollbar-color: rgba(0, 242, 254, 0.5) rgba(10, 13, 20, 0.7);
 }
 
 /* RESPONSIVE LAYOUT FOR SMALLER SCREENS & LAPTOPS */
-@media (max-width: 1366px) {
-  .terminal-body {
-    grid-template-columns: 240px minmax(320px, 1fr) 310px;
+@media (max-width: 1280px) {
+  .brand-info .subtext {
+    display: none;
+  }
+  .device-badge {
+    display: none;
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1080px) {
+  .session-badge {
+    display: none;
+  }
   .terminal-body {
-    grid-template-columns: 220px minmax(280px, 1fr) 290px;
+    grid-template-columns: 200px minmax(0, 1fr) 290px;
+  }
+  .terminal-body.watchlist-collapsed {
+    grid-template-columns: 0px minmax(0, 1fr) 290px;
+  }
+  .sidebar {
+    width: 200px;
+  }
+  .signal-sidebar {
+    width: 290px;
+    min-width: 270px;
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 850px) {
+  body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh;
+  }
+
+  .app-container {
+    height: auto !important;
+    min-height: 100vh;
+  }
+
   .terminal-body {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   .sidebar {
     height: 280px;
     min-height: 280px;
+    width: 100% !important;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
   }
@@ -1686,12 +1759,14 @@ body {
   .chart-section {
     height: 480px;
     min-height: 480px;
+    width: 100% !important;
   }
 
   .signal-sidebar {
-    height: auto;
-    max-height: none;
-    overflow-y: visible;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
     border-left: none;
     border-top: 1px solid var(--border-color);
   }

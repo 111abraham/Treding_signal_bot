@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v=3.5" />
   <!-- TradingView Lightweight Charts CDN -->
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -56,6 +56,10 @@
           </div>
         </div>
 
+        <button id="btnExpandWatchlist" class="btn btn-secondary btn-sm" style="display: none;" title="Expand Watchlist">
+          <span class="btn-icon">📋</span> Watchlist
+        </button>
+
         <button id="btnScanNow" class="btn btn-primary">
           <span class="btn-icon">⚡</span> Run Scan Now
         </button>
@@ -66,14 +70,15 @@
     </header>
 
     <!-- MAIN TERMINAL WORKSPACE -->
-    <main class="terminal-body">
+    <main class="terminal-body" id="terminalBody">
       <!-- LEFT SIDEBAR: WATCHLIST -->
-      <aside class="sidebar">
+      <aside class="sidebar" id="watchlistSidebar">
         <div class="sidebar-header">
           <h2>WATCHLIST</h2>
-          <div class="sidebar-header-actions" style="display: flex; gap: 6px;">
-            <button id="btnSyncMt5" class="btn-sm btn-outline" title="Sync All Assets Directly From FundedNext MT5">🔄 Sync MT5</button>
+          <div class="sidebar-header-actions" style="display: flex; gap: 4px; align-items: center;">
+            <button id="btnSyncMt5" class="btn-sm btn-outline" title="Sync All Assets Directly From FundedNext MT5">🔄 Sync</button>
             <button id="btnAddAsset" class="btn-sm btn-outline">+ Add</button>
+            <button id="btnToggleWatchlist" class="btn-sm btn-outline" title="Collapse Watchlist to expand Chart & Signals">◀</button>
           </div>
         </div>
 
@@ -653,6 +658,6 @@
 
   </div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=3.5"></script>
 </body>
 </html>

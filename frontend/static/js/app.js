@@ -1699,6 +1699,41 @@ async function loadPerformance() {
 
 // 5. EVENT LISTENERS & MODALS
 function setupEventListeners() {
+  const btnToggleWatchlist = document.getElementById("btnToggleWatchlist");
+  const btnExpandWatchlist = document.getElementById("btnExpandWatchlist");
+  const terminalBody = document.getElementById("terminalBody");
+
+  function setWatchlistCollapsed(collapsed) {
+    if (!terminalBody) return;
+    if (collapsed) {
+      terminalBody.classList.add("watchlist-collapsed");
+      if (btnExpandWatchlist) btnExpandWatchlist.style.display = "inline-flex";
+    } else {
+      terminalBody.classList.remove("watchlist-collapsed");
+      if (btnExpandWatchlist) btnExpandWatchlist.style.display = "none";
+    }
+    setTimeout(() => {
+      if (chart && chartContainer) {
+        chart.applyOptions({
+          width: chartContainer.clientWidth,
+          height: chartContainer.clientHeight,
+        });
+      }
+    }, 60);
+  }
+
+  if (btnToggleWatchlist) {
+    btnToggleWatchlist.addEventListener("click", () => setWatchlistCollapsed(true));
+  }
+  if (btnExpandWatchlist) {
+    btnExpandWatchlist.addEventListener("click", () => setWatchlistCollapsed(false));
+  }
+
+  // On smaller screens <= 1080px, auto-collapse watchlist so chart & right sidebar have ample room
+  if (window.innerWidth <= 1080) {
+    setWatchlistCollapsed(true);
+  }
+
   // Download helper for CSV / JSON export
   async function downloadExportFile(format, tf = null) {
     try {
