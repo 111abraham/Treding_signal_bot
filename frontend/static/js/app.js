@@ -53,6 +53,7 @@ const currentPriceDisplay = document.getElementById("currentPriceDisplay");
 const activeSymbolElem = document.getElementById("activeSymbol");
 const activeNameElem = document.getElementById("activeName");
 const activeCategoryElem = document.getElementById("activeCategory");
+const activeMarketLiveness = document.getElementById("activeMarketLiveness");
 const directionValue = document.getElementById("directionValue");
 const expectedReturnValue = document.getElementById("expectedReturnValue");
 const convictionValue = document.getElementById("convictionValue");
@@ -249,9 +250,14 @@ function updateActiveSignalLifespanClock(nowSec) {
     }
   }
 
+  const isMarketPaused = (activeTrade && (activeTrade.is_market_paused || activeTrade.is_market_open === false)) ||
+                         (currentActiveSignal && (currentActiveSignal.is_market_paused || currentActiveSignal.is_market_open === false));
+
   const durStr = formatRemainingDuration(secLeft);
   if (lvlSignalRemaining) {
-    if (isFinished) {
+    if (isMarketPaused) {
+      lvlSignalRemaining.textContent = `⏸️ Paused (Market Closed) - Bar ${currentBar} of ${maxBars} [${sigTf}]`;
+    } else if (isFinished) {
       lvlSignalRemaining.textContent = `⏱️ Finished (${maxBars}/${maxBars} [${sigTf}])`;
     } else {
       lvlSignalRemaining.textContent = `⏳ Bar ${currentBar} of ${maxBars} [${sigTf}] (~${durStr} left)`;
@@ -259,7 +265,9 @@ function updateActiveSignalLifespanClock(nowSec) {
   }
 
   if (lifespanPillValue) {
-    if (isFinished) {
+    if (isMarketPaused) {
+      lifespanPillValue.textContent = `⏸️ Paused (Market Closed)`;
+    } else if (isFinished) {
       lifespanPillValue.textContent = `⏱️ Finished (${maxBars}/${maxBars} [${sigTf}])`;
     } else {
       lifespanPillValue.textContent = `⏳ Bar ${currentBar}/${maxBars} [${sigTf}] (${durStr} left)`;
@@ -315,6 +323,7 @@ function startLiveCountdownEngine() {
       const maxC = parseInt(el.dataset.max, 10) || currentForecastCandles || 5;
       const step = getTimeframeSeconds(tf);
       if (!entryUnix) return;
+      if (el.dataset.paused === "true" || el.classList.contains("paused")) return;
 
       const expUnix = entryUnix + maxC * step;
       const secLeft = expUnix - nowSec;
@@ -701,6 +710,26 @@ async function loadChartData(symbol, timeframe, pinnedSignal = null) {
     activeSymbolElem.textContent = data.symbol;
     activeNameElem.textContent = data.name;
     activeCategoryElem.textContent = data.category;
+
+    // Check & Update Live Broker Market Status
+    if (activeMarketLiveness) {
+      try {
+        fetch(`/api/market/liveness?symbol=${encodeURIComponent(data.symbol)}&timeframe=${encodeURIComponent(currentTimeframe)}`)
+          .then((r) => r.json())
+          .then((lData) => {
+            if (lData && lData.is_open) {
+              activeMarketLiveness.className = "badge market-liveness-pill live";
+              activeMarketLiveness.textContent = "🟢 Live";
+              activeMarketLiveness.title = lData.reason || "Market is open and quoting live";
+            } else {
+              activeMarketLiveness.className = "badge market-liveness-pill closed";
+              activeMarketLiveness.textContent = "🔴 Market Closed";
+              activeMarketLiveness.title = (lData && lData.reason) ? lData.reason : "Market is closed or broker feed is frozen";
+            }
+          })
+          .catch(() => {});
+      } catch (errLive) {}
+    }
     
     currentHistoricalCandles = data.candles || [];
     const lastHistorical = currentHistoricalCandles[currentHistoricalCandles.length - 1];
@@ -1140,11 +1169,17 @@ function renderSignalsList() {
     const elapsedBars = Math.min(maxC, Math.max(0, Math.floor((nowSec - entryUnix) / step)));
     const currentBar = Math.min(maxC, elapsedBars + 1);
 
-    const countdownHtml = showCountdownTimers
-      ? (secLeft <= 0
-          ? `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC}/${maxC} [${sig.timeframe}])</span>`
-          : `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ Bar ${currentBar}/${maxC} [${sig.timeframe}] (${formatRemainingDuration(secLeft)} left)</span>`)
-      : "";
+    const isPaused = sig.is_market_paused || sig.is_market_open === false;
+    let countdownHtml = "";
+    if (showCountdownTimers) {
+      if (isPaused) {
+        countdownHtml = `<span class="sig-countdown paused" data-paused="true" title="${sig.market_reason || 'Market is closed on broker'}">⏸️ Paused (Market Closed)</span>`;
+      } else if (secLeft <= 0) {
+        countdownHtml = `<span class="sig-countdown completed" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏱️ Finished (${maxC}/${maxC} [${sig.timeframe}])</span>`;
+      } else {
+        countdownHtml = `<span class="sig-countdown" data-entry="${entryUnix}" data-tf="${sig.timeframe}" data-max="${maxC}">⏳ Bar ${currentBar}/${maxC} [${sig.timeframe}] (${formatRemainingDuration(secLeft)} left)</span>`;
+      }
+    }
 
     card.innerHTML = `
       <div class="sig-header">

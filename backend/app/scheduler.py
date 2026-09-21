@@ -9,6 +9,7 @@ from app.forecasting.signal_generator import signal_generator
 from app.telegram_bot import telegram_notifier
 from app.forecasting.outcome_tracker import outcome_tracker
 from app.forecasting.timesfm_arbiter import timesfm_arbiter
+from app.market_liveness import market_liveness
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,20 @@ class ScanEngine:
                             return None
                         
                         df.attrs["symbol"] = sym
+
+                        # 1b. Check Market & Broker Liveness (Suppress closed / stagnant markets)
+                        liveness = market_liveness.check_liveness(sym, tf, df)
+                        if not liveness.get("is_open", True):
+                            logger.info(f"Skipping {sym} ({tf}): Market closed on active broker ({liveness.get('reason')})")
+                            results.append({
+                                "symbol": sym,
+                                "timeframe": tf,
+                                "is_actionable": False,
+                                "direction": "NEUTRAL",
+                                "market_closed": True,
+                                "suppression_reason": liveness.get("reason", "Market is closed on broker")
+                            })
+                            return None
 
                         # 2. Run AI multi-step forecast
                         forecast_len = int(cfg.get("forecast_candles", 5))

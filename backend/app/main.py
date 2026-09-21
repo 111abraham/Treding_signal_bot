@@ -21,6 +21,7 @@ from app.telegram_bot import telegram_notifier
 from app.scheduler import scan_engine, background_scheduler_loop
 from app.forecasting.timesfm_arbiter import timesfm_arbiter
 from app.mt5_bridge import mt5_bridge
+from app.market_liveness import market_liveness
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TradingTerminal")
@@ -142,6 +143,12 @@ async def get_system_status():
         "timesfm": timesfm_arbiter.get_status(),
         "mt5": mt5_bridge.get_status()
     }
+
+
+@app.get("/api/market/liveness")
+async def get_market_liveness(symbol: str = Query("EURUSD"), timeframe: str = Query("1h")):
+    """Evaluates broker liveness, tick freshness, and market open/close status for a symbol."""
+    return market_liveness.check_liveness(symbol, timeframe)
 
 
 @app.get("/api/mt5/status")

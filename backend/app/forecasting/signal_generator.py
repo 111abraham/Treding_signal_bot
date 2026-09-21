@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 import numpy as np
 import pandas as pd
 from app.data_fetcher import get_current_session_info
+from app.market_liveness import market_liveness
 
 
 class SignalGenerator:
@@ -33,7 +34,11 @@ class SignalGenerator:
         expected_return_pct = forecast_result["expected_return_pct"]
         pred_candles = forecast_result["predicted_candles"]
         
-        # Market session check
+        # Market liveness & session check
+        liveness = market_liveness.check_liveness(symbol, df=df)
+        if not liveness.get("is_open", True):
+            return None
+
         session_info = get_current_session_info()
         is_overlap = session_info["is_london_ny_overlap"]
         

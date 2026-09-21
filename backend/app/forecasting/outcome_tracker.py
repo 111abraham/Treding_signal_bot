@@ -7,6 +7,7 @@ import pandas as pd
 
 from app.data_fetcher import MarketDataFetcher
 from app.telegram_bot import telegram_notifier
+from app.market_liveness import market_liveness
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,12 @@ class OutcomeTracker:
                 # Fetch recent candles to evaluate price progression since trade opening
                 df, err = MarketDataFetcher.fetch_candles(sym, interval=tf, target_count=30)
                 if err or df.empty:
+                    remaining_active.append(trade)
+                    continue
+
+                # Pause evaluation if market is closed or stagnant on active broker
+                liveness = market_liveness.check_liveness(sym, tf, df)
+                if not liveness.get("is_open", True):
                     remaining_active.append(trade)
                     continue
 
@@ -471,6 +478,14 @@ class OutcomeTracker:
             exp_unix = t_copy.get("expires_at_unix") or (entry_unix + (max_c * step_sec))
             t_copy["expires_at_unix"] = exp_unix
             t_copy["seconds_remaining"] = max(0, exp_unix - now_ts)
+
+            # Check market liveness for active trade
+            liveness = market_liveness.check_liveness(t_copy.get("symbol", ""), tf)
+            is_open = liveness.get("is_open", True)
+            t_copy["is_market_open"] = is_open
+            t_copy["market_reason"] = liveness.get("reason", "")
+            t_copy["is_market_paused"] = not is_open
+
             enriched_active.append(t_copy)
 
         closed_slice = raw_closed[:limit] if (limit is not None and limit > 0) else raw_closed

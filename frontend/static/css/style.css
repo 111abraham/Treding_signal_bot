@@ -1492,4 +1492,31 @@ body {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+.sig-countdown.paused {
+  color: #ffab00;
+  background: rgba(255, 171, 0, 0.12);
+  border-color: rgba(255, 171, 0, 0.3);
+  font-weight: 600;
+}
+
+/* Market Liveness Indicator Badge */
+.market-liveness-pill {
+  font-size: 10px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.market-liveness-pill.live {
+  background-color: rgba(0, 230, 118, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.market-liveness-pill.closed {
+  background-color: rgba(255, 82, 82, 0.12);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+
 
