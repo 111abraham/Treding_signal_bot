@@ -31,7 +31,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default_dollar_risk": 50.0,
         "split_tp_mode": False,
         "auto_close_on_expiry": True,
-        "auto_trade_timeframes": ["1h", "4h"]
+        "auto_trade_timeframes": ["1h", "4h"],
+        "prop_firm_guardrails": {
+            "enabled": True,
+            "max_simultaneous_trades": 3,
+            "max_trades_per_symbol": 1,
+            "min_free_margin_pct": 50.0,
+            "max_daily_drawdown_pct": 3.5,
+            "prevent_correlated_exposure": True
+        }
     },
     "telegram": {
         "enabled": False,

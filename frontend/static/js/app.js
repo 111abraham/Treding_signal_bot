@@ -357,6 +357,85 @@ function startLiveCountdownEngine() {
   }, 1000);
 }
 
+async function loadPropGuardStatus() {
+  try {
+    const res = await fetch("/api/mt5/prop-guard-status");
+    if (!res.ok) return;
+    const data = await res.json();
+    const rules = data.rules || {};
+    const telem = data.telemetry || {};
+
+    const elNotice = document.getElementById("mt5PropGuardNotice");
+    const elState = document.getElementById("mt5PropGuardState");
+    const elTrades = document.getElementById("mt5PropGuardTradesBadge");
+    const elMargin = document.getElementById("mt5PropGuardMargin");
+    const elDD = document.getElementById("mt5PropGuardDD");
+
+    if (!elNotice || !elState) return;
+
+    if (!rules.enabled) {
+      elState.textContent = "DISABLED";
+      elState.style.color = "var(--text-muted)";
+      elNotice.style.borderColor = "rgba(255, 255, 255, 0.1)";
+      if (elTrades) elTrades.textContent = "Disabled in Settings";
+      if (elMargin) elMargin.textContent = "--";
+      if (elDD) elDD.textContent = "--";
+      return;
+    }
+
+    if (!telem.mt5_connected) {
+      elState.textContent = "MT5 OFFLINE";
+      elState.style.color = "var(--accent-red)";
+      elNotice.style.borderColor = "rgba(255, 77, 77, 0.2)";
+      if (elTrades) elTrades.textContent = "Disconnected";
+      if (elMargin) elMargin.textContent = "--";
+      if (elDD) elDD.textContent = "--";
+      return;
+    }
+
+    const openCount = telem.open_trades_count || 0;
+    const maxTrades = rules.max_simultaneous_trades || 3;
+    const isAtCap = openCount >= maxTrades;
+
+    const freeMarginPct = telem.free_margin_pct !== undefined ? telem.free_margin_pct : 100.0;
+    const minMargin = rules.min_free_margin_pct || 50.0;
+    const isMarginLow = freeMarginPct < minMargin;
+
+    const dailyDD = telem.daily_drawdown_pct || 0.0;
+    const maxDD = rules.max_daily_drawdown_pct || 3.5;
+    const isDDHigh = dailyDD >= maxDD;
+
+    if (isAtCap || isMarginLow || isDDHigh) {
+      elState.textContent = "PAUSED";
+      elState.style.color = "var(--accent-red)";
+      elNotice.style.borderColor = "rgba(255, 77, 77, 0.4)";
+      elNotice.style.background = "rgba(255, 77, 77, 0.08)";
+    } else {
+      elState.textContent = "ACTIVE";
+      elState.style.color = "var(--accent-green)";
+      elNotice.style.borderColor = "rgba(16, 185, 129, 0.2)";
+      elNotice.style.background = "rgba(16, 185, 129, 0.05)";
+    }
+
+    if (elTrades) {
+      elTrades.textContent = `Trades: ${openCount} / ${maxTrades}`;
+      elTrades.style.color = isAtCap ? "var(--accent-red)" : "var(--text-primary)";
+    }
+
+    if (elMargin) {
+      elMargin.textContent = `${freeMarginPct.toFixed(0)}%`;
+      elMargin.style.color = isMarginLow ? "var(--accent-red)" : "var(--accent-cyan)";
+    }
+
+    if (elDD) {
+      elDD.textContent = `${dailyDD.toFixed(1)}% / ${maxDD.toFixed(1)}%`;
+      elDD.style.color = isDDHigh ? "var(--accent-red)" : (dailyDD > 2.0 ? "var(--accent-yellow, #f59e0b)" : "var(--accent-green)");
+    }
+  } catch (e) {
+    console.debug("Failed loading prop guard status:", e);
+  }
+}
+
 async function loadInitialSettings() {
   try {
     const res = await fetch("/api/settings");
@@ -399,6 +478,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   startLiveCountdownEngine();
   await loadInitialSettings();
   await loadStatus();
+  await loadPropGuardStatus();
   await loadWatchlist();
   await loadSignals();
   await loadPerformance();
@@ -407,6 +487,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Status and scanner polling
   setInterval(loadStatus, 15000);
+  setInterval(loadPropGuardStatus, 15000);
   setInterval(loadSignals, 30000);
   setInterval(loadPerformance, 20000);
   setInterval(pollHtfRadar, 20000);
@@ -1176,6 +1257,7 @@ async function executeActiveSignalOnMt5() {
         if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
       }, 5000);
       loadPerformance();
+      loadPropGuardStatus();
     } else {
       const errMsg = data.detail || data.error || data.comment || "Order execution rejected by broker";
       if (mt5TradeFeedback) {
@@ -1185,6 +1267,7 @@ async function executeActiveSignalOnMt5() {
       }
       btnExecuteMt5Trade.disabled = false;
       if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
+      loadPropGuardStatus();
     }
   } catch (err) {
     if (mt5TradeFeedback) {
@@ -2258,6 +2341,22 @@ function setupEventListeners() {
       if (elTpMode) elTpMode.value = strat.split_tp_mode ? "split" : "single";
       if (elAutoClose) elAutoClose.checked = strat.auto_close_on_expiry !== false;
 
+      // Populate FundedNext Prop Firm Guardrails
+      const propRules = strat.prop_firm_guardrails || {};
+      const elPropEnabled = document.getElementById("propGuardEnabled");
+      const elPropMaxTrades = document.getElementById("propMaxTrades");
+      const elPropMaxPerSym = document.getElementById("propMaxPerSymbol");
+      const elPropMinMargin = document.getElementById("propMinFreeMargin");
+      const elPropMaxDD = document.getElementById("propMaxDailyDrawdown");
+      const elPropPreventCorrelated = document.getElementById("propPreventCorrelated");
+
+      if (elPropEnabled) elPropEnabled.checked = propRules.enabled !== false;
+      if (elPropMaxTrades) elPropMaxTrades.value = propRules.max_simultaneous_trades ?? 3;
+      if (elPropMaxPerSym) elPropMaxPerSym.value = propRules.max_trades_per_symbol ?? 1;
+      if (elPropMinMargin) elPropMinMargin.value = propRules.min_free_margin_pct ?? 50;
+      if (elPropMaxDD) elPropMaxDD.value = propRules.max_daily_drawdown_pct ?? 3.5;
+      if (elPropPreventCorrelated) elPropPreventCorrelated.checked = propRules.prevent_correlated_exposure !== false;
+
       // Populate auto-execution timeframe checkboxes
       const savedAutoTfs = strat.auto_trade_timeframes || ["1h", "4h"];
       document.querySelectorAll(".auto-trade-tf-check").forEach((cb) => {
@@ -2304,6 +2403,12 @@ function setupEventListeners() {
       default_dollar_risk: parseFloat(document.getElementById("defaultDollarRisk")?.value || 50),
       split_tp_mode: document.getElementById("tpExecutionMode")?.value === "split",
       auto_close_on_expiry: document.getElementById("autoCloseOnExpiry")?.checked !== false,
+      prop_guard_enabled: document.getElementById("propGuardEnabled")?.checked !== false,
+      prop_max_trades: parseInt(document.getElementById("propMaxTrades")?.value || 3),
+      prop_max_per_symbol: parseInt(document.getElementById("propMaxPerSymbol")?.value || 1),
+      prop_min_free_margin: parseFloat(document.getElementById("propMinFreeMargin")?.value || 50),
+      prop_max_daily_drawdown: parseFloat(document.getElementById("propMaxDailyDrawdown")?.value || 3.5),
+      prop_prevent_correlated: document.getElementById("propPreventCorrelated")?.checked !== false,
     };
 
     currentForecastCandles = stratData.forecast_candles;
@@ -2347,6 +2452,7 @@ function setupEventListeners() {
       elGuardStatus.style.color = autoCloseOnExpiryEnabled ? "var(--accent-cyan)" : "var(--text-muted)";
     }
 
+    await loadPropGuardStatus();
     closeSettings();
     renderChartTradeMarkers();
     loadChartData(currentSymbol, currentTimeframe);

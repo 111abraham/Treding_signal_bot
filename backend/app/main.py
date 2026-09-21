@@ -135,6 +135,12 @@ class StrategySettingsRequest(BaseModel):
     split_tp_mode: Optional[bool] = None
     auto_close_on_expiry: Optional[bool] = None
     auto_trade_timeframes: Optional[List[str]] = None
+    prop_guard_enabled: Optional[bool] = None
+    prop_max_trades: Optional[int] = None
+    prop_max_per_symbol: Optional[int] = None
+    prop_min_free_margin: Optional[float] = None
+    prop_max_daily_drawdown: Optional[float] = None
+    prop_prevent_correlated: Optional[bool] = None
 
 
 class CalculateLotsRequest(BaseModel):
@@ -157,6 +163,7 @@ class ExecuteOrderRequest(BaseModel):
     tp2: Optional[float] = None
     split_tp: Optional[bool] = False
     comment: Optional[str] = "AI Quant Signal"
+    skip_guardrails: Optional[bool] = False
 
 
 class ClosePositionRequest(BaseModel):
@@ -250,7 +257,8 @@ async def execute_mt5_order(req: ExecuteOrderRequest):
         tp=req.tp,
         tp2=req.tp2,
         split_tp=req.split_tp or False,
-        comment=req.comment or "AI Quant Terminal"
+        comment=req.comment or "AI Quant Terminal",
+        skip_guardrails=req.skip_guardrails or False
     )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Order execution failed"))
@@ -297,6 +305,18 @@ async def close_mt5_position(req: ClosePositionRequest):
 async def get_mt5_positions():
     """Returns currently open positions on MetaTrader 5."""
     return {"positions": mt5_bridge.get_open_positions()}
+
+
+@app.get("/api/mt5/prop-guard-status")
+async def get_mt5_prop_guard_status():
+    """Returns live FundedNext guardrail telemetry (equity, margin, daily DD) and active rules."""
+    strat = config_manager.get("strategy", {})
+    rules = strat.get("prop_firm_guardrails", {})
+    telemetry = mt5_bridge.get_prop_guard_telemetry()
+    return {
+        "rules": rules,
+        "telemetry": telemetry
+    }
 
 
 @app.get("/api/watchlist")
@@ -555,6 +575,21 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         strat["auto_close_on_expiry"] = req.auto_close_on_expiry
     if req.auto_trade_timeframes is not None:
         strat["auto_trade_timeframes"] = [t.lower() for t in req.auto_trade_timeframes]
+
+    prop_guard = strat.get("prop_firm_guardrails", {})
+    if req.prop_guard_enabled is not None:
+        prop_guard["enabled"] = req.prop_guard_enabled
+    if req.prop_max_trades is not None:
+        prop_guard["max_simultaneous_trades"] = int(req.prop_max_trades)
+    if req.prop_max_per_symbol is not None:
+        prop_guard["max_trades_per_symbol"] = int(req.prop_max_per_symbol)
+    if req.prop_min_free_margin is not None:
+        prop_guard["min_free_margin_pct"] = float(req.prop_min_free_margin)
+    if req.prop_max_daily_drawdown is not None:
+        prop_guard["max_daily_drawdown_pct"] = float(req.prop_max_daily_drawdown)
+    if req.prop_prevent_correlated is not None:
+        prop_guard["prevent_correlated_exposure"] = req.prop_prevent_correlated
+    strat["prop_firm_guardrails"] = prop_guard
 
     updates["strategy"] = strat
     config_manager.update(updates)

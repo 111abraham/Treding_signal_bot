@@ -155,6 +155,10 @@ class ScanEngine:
                                                     signal["mt5_tickets"] = tickets
                                                     signal["auto_traded"] = True
                                                     logger.info(f"✅ Auto-execution successful on MT5 for {sym}: Tickets {tickets}")
+                                                elif exec_res.get("guardrail_blocked"):
+                                                    signal["guardrail_blocked"] = True
+                                                    signal["guardrail_reason"] = exec_res.get("error")
+                                                    logger.warning(f"🛡️ Auto-execution paused by Prop Firm Guardrail for {sym}: {exec_res.get('error')}")
                                                 else:
                                                     logger.warning(f"⚠️ Auto-execution rejected by MT5 broker for {sym}: {exec_res.get('error')}")
                                             except Exception as e_auto:

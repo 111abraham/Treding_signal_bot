@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import datetime
 import pandas as pd
 
@@ -409,6 +409,153 @@ class MT5Bridge:
             "tick_size": tick_size
         }
 
+    def get_prop_guard_telemetry(self) -> Dict[str, Any]:
+        """
+        Gathers live account telemetry for FundedNext prop firm guardrails:
+        equity, balance, margin, free margin %, open positions count,
+        and today's calculated drawdown %.
+        """
+        if not MT5_AVAILABLE or not self.is_connected:
+            self.initialize()
+
+        if not MT5_AVAILABLE or not self.is_connected:
+            return {
+                "connected": False,
+                "open_positions_count": 0,
+                "open_symbols": [],
+                "open_lots": 0.0,
+                "balance": 0.0,
+                "equity": 0.0,
+                "margin": 0.0,
+                "margin_free": 0.0,
+                "free_margin_pct": 100.0,
+                "margin_level": 0.0,
+                "floating_pnl": 0.0,
+                "today_realized_pnl": 0.0,
+                "today_net_pnl": 0.0,
+                "daily_drawdown_pct": 0.0,
+                "status": "OFFLINE"
+            }
+
+        try:
+            acc = mt5.account_info()
+            if acc is None:
+                return {"connected": False, "status": "NO_ACCOUNT"}
+
+            positions = mt5.positions_get() or []
+            open_count = len(positions)
+            open_symbols = [p.symbol for p in positions]
+            open_lots = round(sum(p.volume for p in positions), 2)
+
+            balance = float(acc.balance)
+            equity = float(acc.equity)
+            margin = float(acc.margin)
+            margin_free = float(acc.margin_free)
+            margin_level = float(acc.margin_level) if margin > 0 else 0.0
+            free_margin_pct = round((margin_free / max(1.0, equity)) * 100.0, 1) if equity > 0 else 100.0
+            floating_pnl = float(acc.profit)
+
+            # Calculate today's drawdown from 00:00 server time
+            now_dt = datetime.datetime.now(datetime.timezone.utc)
+            today_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            today_realized_pnl = 0.0
+            deals = mt5.history_deals_get(today_start, now_dt)
+            if deals:
+                for d in deals:
+                    if getattr(d, "entry", None) in [1, 2, 3]:
+                        today_realized_pnl += (getattr(d, "profit", 0.0) + getattr(d, "swap", 0.0) + getattr(d, "commission", 0.0))
+
+            daily_base = equity - (today_realized_pnl + floating_pnl)
+            if daily_base <= 0:
+                daily_base = balance
+
+            today_net_pnl = today_realized_pnl + floating_pnl
+            daily_dd_pct = round((abs(today_net_pnl) / max(1.0, daily_base)) * 100.0, 2) if today_net_pnl < 0 else 0.0
+
+            return {
+                "connected": True,
+                "open_positions_count": open_count,
+                "open_symbols": open_symbols,
+                "open_lots": open_lots,
+                "balance": balance,
+                "equity": equity,
+                "margin": margin,
+                "margin_free": margin_free,
+                "free_margin_pct": free_margin_pct,
+                "margin_level": margin_level,
+                "floating_pnl": round(floating_pnl, 2),
+                "today_realized_pnl": round(today_realized_pnl, 2),
+                "today_net_pnl": round(today_net_pnl, 2),
+                "daily_drawdown_pct": daily_dd_pct,
+                "status": "ONLINE"
+            }
+        except Exception as e:
+            logger.debug(f"Error getting prop guard telemetry: {e}")
+            return {"connected": False, "error": str(e), "status": "ERROR"}
+
+    def validate_prop_firm_guardrails(
+        self,
+        symbol: str,
+        direction: str,
+        count_to_add: int = 1,
+        custom_rules: Optional[Dict[str, Any]] = None
+    ) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Validates live MT5 account telemetry against FundedNext risk & margin limits.
+        Returns: (passed: bool, reason_message: str, telemetry: dict)
+        """
+        from app.config import config_manager
+        strat_cfg = config_manager.get("strategy", {})
+        rules = custom_rules or strat_cfg.get("prop_firm_guardrails", {})
+
+        telemetry = self.get_prop_guard_telemetry()
+        if not rules.get("enabled", True):
+            return True, "Prop firm guardrails disabled in settings", telemetry
+
+        if not telemetry.get("connected"):
+            return True, "MT5 disconnected; skipping pre-checks", telemetry
+
+        # 1. Max Simultaneous Trades Rule
+        max_trades = int(rules.get("max_simultaneous_trades", 3))
+        if max_trades > 0 and (telemetry["open_positions_count"] + count_to_add) > max_trades:
+            reason = f"🛡️ Blocked by FundedNext Guard: Max simultaneous trades ({max_trades}) reached. Currently open: {telemetry['open_positions_count']} positions. Wait for a trade to close or expire at Bar 5."
+            return False, reason, telemetry
+
+        # 2. Max Trades Per Symbol Rule
+        max_per_symbol = int(rules.get("max_trades_per_symbol", 1))
+        broker_sym = self._resolve_broker_symbol(symbol) or symbol
+        curr_symbol_count = sum(1 for s in telemetry["open_symbols"] if s == broker_sym or s == symbol)
+        if max_per_symbol > 0 and curr_symbol_count >= max_per_symbol:
+            reason = f"🛡️ Blocked by FundedNext Guard: Already holding {curr_symbol_count} open position(s) on {symbol} (Max {max_per_symbol} allowed)."
+            return False, reason, telemetry
+
+        # 3. Minimum Free Margin Buffer Rule
+        min_free_margin = float(rules.get("min_free_margin_pct", 50.0))
+        if min_free_margin > 0 and telemetry["free_margin_pct"] < min_free_margin:
+            reason = f"🛡️ Blocked by FundedNext Margin Guard: Available free margin ({telemetry['free_margin_pct']:.1f}%) is below required {min_free_margin:.0f}% safety buffer."
+            return False, reason, telemetry
+
+        # 4. Daily Drawdown Circuit Breaker
+        max_daily_dd = float(rules.get("max_daily_drawdown_pct", 3.5))
+        if max_daily_dd > 0 and telemetry["daily_drawdown_pct"] >= max_daily_dd:
+            reason = f"🚨 FundedNext Circuit Breaker: Daily drawdown today is {telemetry['daily_drawdown_pct']:.2f}%, reaching the {max_daily_dd:.1f}% safety ceiling (FundedNext hard breach at 5.0%). New entries locked for today."
+            return False, reason, telemetry
+
+        # 5. Correlated Currency Exposure Rule
+        if rules.get("prevent_correlated_exposure", True) and len(symbol) == 6 and symbol.isalpha():
+            base_curr = symbol[:3]
+            base_matches = 0
+            for open_s in telemetry["open_symbols"]:
+                clean_s = open_s.split(".")[0][:6]
+                if len(clean_s) == 6 and clean_s.isalpha():
+                    if clean_s[:3] == base_curr:
+                        base_matches += 1
+            if base_matches >= 2:
+                reason = f"🛡️ Blocked by FundedNext Guard: High correlated exposure on {base_curr}. Already holding {base_matches} open positions."
+                return False, reason, telemetry
+
+        return True, "All FundedNext prop firm guardrails passed", telemetry
+
     def execute_order(
         self,
         symbol: str,
@@ -419,18 +566,33 @@ class MT5Bridge:
         tp: Optional[float] = None,
         tp2: Optional[float] = None,
         split_tp: bool = False,
+        skip_guardrails: bool = False,
         comment: str = "AI Quant Terminal"
     ) -> Dict[str, Any]:
         """
         Places a direct market execution order on MetaTrader 5 terminal with SL and TP.
         Supports Split TP 50/50 Mode: places 2 half-sized orders targeting TP1 and TP2.
+        Enforces FundedNext Prop Firm risk and margin guardrails unless skip_guardrails=True.
         """
+        # Validate FundedNext Prop Firm Guardrails (Position Cap, Margin, Daily Drawdown)
+        if not skip_guardrails:
+            count_needed = 2 if (split_tp and tp2 and tp2 > 0) else 1
+            passed, reason, telemetry = self.validate_prop_firm_guardrails(symbol, direction, count_to_add=count_needed)
+            if not passed:
+                logger.warning(f"🛡️ MT5 Trade Blocked: {reason}")
+                return {
+                    "success": False,
+                    "error": reason,
+                    "guardrail_blocked": True,
+                    "telemetry": telemetry
+                }
+
         if split_tp and tp2 and tp2 > 0:
             half_risk = (dollar_risk / 2.0) if dollar_risk else None
             half_lots = (lots / 2.0) if lots else None
             logger.info(f"Executing Split TP 50/50 order on {symbol}: Half Risk ${half_risk} to TP1, Half Risk to TP2")
-            res1 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp, split_tp=False, comment=f"{comment} (TP1)")
-            res2 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp2, split_tp=False, comment=f"{comment} (TP2)")
+            res1 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp, split_tp=False, skip_guardrails=True, comment=f"{comment} (TP1)")
+            res2 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp2, split_tp=False, skip_guardrails=True, comment=f"{comment} (TP2)")
             
             tickets = []
             if res1.get("success"):
