@@ -125,8 +125,10 @@ class ScanEngine:
                                     auto_trade_enabled = bool(strat_cfg.get("auto_trade_enabled", False))
                                     auto_trade_min_conv = float(strat_cfg.get("auto_trade_min_conviction", 80.0))
                                     auto_trade_dual_ai_only = bool(strat_cfg.get("auto_trade_dual_ai_only", True))
+                                    auto_trade_tfs = [t.lower() for t in strat_cfg.get("auto_trade_timeframes", ["1h", "4h"])]
+                                    tf_allowed = (tf or "1h").lower() in auto_trade_tfs
 
-                                    if auto_trade_enabled and signal.get("conviction", 0) >= auto_trade_min_conv:
+                                    if auto_trade_enabled and tf_allowed and signal.get("conviction", 0) >= auto_trade_min_conv:
                                         dual_ai_ok = True
                                         if auto_trade_dual_ai_only:
                                             dual_ai_ok = (signal.get("timesfm_status") == "ready" and signal.get("timesfm_consensus") == "AGREEMENT")

@@ -2114,6 +2114,12 @@ function setupEventListeners() {
       if (elDefRisk) elDefRisk.value = strat.default_dollar_risk ?? 50;
       if (elTpMode) elTpMode.value = strat.split_tp_mode ? "split" : "single";
       if (elAutoClose) elAutoClose.checked = strat.auto_close_on_expiry !== false;
+
+      // Populate auto-execution timeframe checkboxes
+      const savedAutoTfs = strat.auto_trade_timeframes || ["1h", "4h"];
+      document.querySelectorAll(".auto-trade-tf-check").forEach((cb) => {
+        cb.checked = savedAutoTfs.includes(cb.value);
+      });
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -2134,6 +2140,7 @@ function setupEventListeners() {
 
     // Collect selected multi-timeframe targets
     const selectedTfs = Array.from(document.querySelectorAll(".scan-tf-check:checked")).map((cb) => cb.value);
+    const selectedAutoTfs = Array.from(document.querySelectorAll(".auto-trade-tf-check:checked")).map((cb) => cb.value);
 
     const stratData = {
       max_spread_to_sl_ratio: parseFloat(document.getElementById("maxSpreadRatio").value),
@@ -2150,6 +2157,7 @@ function setupEventListeners() {
       auto_trade_enabled: document.getElementById("autoTradeEnabled")?.checked === true,
       auto_trade_min_conviction: parseFloat(document.getElementById("autoTradeMinConviction")?.value || 80),
       auto_trade_dual_ai_only: document.getElementById("autoTradeDualAiOnly")?.checked !== false,
+      auto_trade_timeframes: selectedAutoTfs.length > 0 ? selectedAutoTfs : ["1h", "4h"],
       default_dollar_risk: parseFloat(document.getElementById("defaultDollarRisk")?.value || 50),
       split_tp_mode: document.getElementById("tpExecutionMode")?.value === "split",
       auto_close_on_expiry: document.getElementById("autoCloseOnExpiry")?.checked !== false,

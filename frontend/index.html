@@ -519,6 +519,18 @@
               <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Restricts auto-execution to setups where both the Primary AI Model and Google TimesFM agree in direction.</small>
 
               <div class="form-group">
+                <label>Allowed Auto-Execution Timeframes</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="5m" /> 5m (Micro-Scalp)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="15m" /> 15m (Scalp)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="1h" checked /> 1h (Intraday)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="4h" checked /> 4h (Swing)</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="1d" /> 1D (Daily)</label>
+                </div>
+                <small>Select which timeframes are permitted to automatically place trades on MT5.</small>
+              </div>
+
+              <div class="form-group">
                 <label for="defaultDollarRisk">Default Trade Risk ($ Amount)</label>
                 <input type="number" id="defaultDollarRisk" min="5" max="10000" step="5" value="50" />
                 <small>The dollar amount to risk per trade. Volume in lots is automatically calculated based on the dynamic SL distance so maximum loss matches this value exactly. Also synced to Telegram signal alerts.</small>

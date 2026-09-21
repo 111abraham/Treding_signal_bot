@@ -123,6 +123,7 @@ class StrategySettingsRequest(BaseModel):
     auto_trade_dual_ai_only: Optional[bool] = None
     split_tp_mode: Optional[bool] = None
     auto_close_on_expiry: Optional[bool] = None
+    auto_trade_timeframes: Optional[List[str]] = None
 
 
 class CalculateLotsRequest(BaseModel):
@@ -512,6 +513,8 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         strat["split_tp_mode"] = req.split_tp_mode
     if req.auto_close_on_expiry is not None:
         strat["auto_close_on_expiry"] = req.auto_close_on_expiry
+    if req.auto_trade_timeframes is not None:
+        strat["auto_trade_timeframes"] = [t.lower() for t in req.auto_trade_timeframes]
 
     updates["strategy"] = strat
     config_manager.update(updates)
