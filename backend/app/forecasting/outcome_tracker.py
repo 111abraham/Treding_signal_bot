@@ -147,6 +147,7 @@ class OutcomeTracker:
             "max_adverse_price": entry_p,
             "mt5_tickets": signal.get("mt5_tickets", []),
             "auto_traded": bool(signal.get("auto_traded", False)),
+            "manual_executed": bool(signal.get("manual_executed", False)),
             "status": "ACTIVE"
         }
 
@@ -154,6 +155,56 @@ class OutcomeTracker:
         self._save()
         logger.info(f"Registered trade for tracking: {trade_id}")
         return True
+
+    def attach_mt5_tickets(
+        self,
+        symbol: str,
+        timeframe: Optional[str],
+        tickets: List[int],
+        manual: bool = False,
+        signal_data: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Associates MT5 order tickets (from manual 1-click or automated executions)
+        with an active trade so they are monitored and auto-closed upon lifespan expiration.
+        """
+        if not tickets:
+            return False
+        sym_clean = symbol.strip().upper()
+        tf_clean = (timeframe or "1h").lower()
+
+        # 1. Search existing active trades
+        found = False
+        for trade in self.active_trades:
+            t_sym = trade.get("symbol", "").upper()
+            t_tf = trade.get("timeframe", "1h").lower()
+            if t_sym == sym_clean and (timeframe is None or t_tf == tf_clean):
+                if "mt5_tickets" not in trade or not isinstance(trade["mt5_tickets"], list):
+                    trade["mt5_tickets"] = []
+                for tk in tickets:
+                    if tk not in trade["mt5_tickets"]:
+                        trade["mt5_tickets"].append(tk)
+                if manual:
+                    trade["manual_executed"] = True
+                found = True
+                break
+
+        # 2. If no active trade exists yet for this symbol & timeframe, register it
+        if not found and signal_data:
+            sig = dict(signal_data)
+            sig["symbol"] = sym_clean
+            sig["timeframe"] = tf_clean
+            sig["mt5_tickets"] = tickets
+            sig["manual_executed"] = manual
+            sig.setdefault("timestamp", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
+            self.register_signal(sig)
+            found = True
+
+        if found:
+            self._save()
+            logger.info(f"Attached MT5 tickets {tickets} to active trade {sym_clean} ({tf_clean}) (manual={manual})")
+            return True
+        return False
 
     async def evaluate_active_trades(self, notify_telegram: bool = True) -> List[Dict[str, Any]]:
         """

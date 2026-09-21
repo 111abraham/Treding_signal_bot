@@ -137,6 +137,8 @@ class CalculateLotsRequest(BaseModel):
 class ExecuteOrderRequest(BaseModel):
     symbol: str
     direction: str
+    timeframe: Optional[str] = "1h"
+    entry_price: Optional[float] = None
     dollar_risk: Optional[float] = 50.0
     lots: Optional[float] = None
     sl: Optional[float] = None
@@ -241,6 +243,33 @@ async def execute_mt5_order(req: ExecuteOrderRequest):
     )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Order execution failed"))
+
+    # Link tickets to active outcome tracking so lifespan auto-close protects manual trades
+    tickets = result.get("tickets") or ([result["ticket"]] if "ticket" in result else [])
+    if tickets:
+        sig_data = None
+        if req.entry_price and req.sl and req.tp:
+            sig_data = {
+                "symbol": req.symbol,
+                "direction": req.direction.upper(),
+                "timeframe": req.timeframe or "1h",
+                "entry_price": req.entry_price,
+                "stop_loss": req.sl,
+                "take_profit_1": req.tp,
+                "take_profit_2": req.tp2 or req.tp,
+                "sl_distance": abs(req.entry_price - req.sl),
+                "tp_distance": abs(req.tp - req.entry_price),
+                "conviction": 75.0,
+                "is_actionable": True
+            }
+        outcome_tracker.attach_mt5_tickets(
+            symbol=req.symbol,
+            timeframe=req.timeframe or "1h",
+            tickets=tickets,
+            manual=True,
+            signal_data=sig_data
+        )
+
     return result
 
 

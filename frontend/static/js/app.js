@@ -40,6 +40,7 @@ function getSelectedTfsDisplay() {
   return Array.from(selectedTfs).map((t) => (t.toUpperCase() === "1D" ? "1D" : t)).join(" + ");
 }
 let showChartTradeMarkers = true;
+let autoCloseOnExpiryEnabled = true;
 let pinnedActiveSignal = null;
 let signalsData = [];
 let closedTradesData = [];
@@ -377,6 +378,13 @@ async function loadInitialSettings() {
       if (btnTpModeSingle && btnTpModeSplit) {
         btnTpModeSingle.classList.toggle("active", currentTpMode === "single");
         btnTpModeSplit.classList.toggle("active", currentTpMode === "split");
+      }
+
+      autoCloseOnExpiryEnabled = cfg.strategy?.auto_close_on_expiry !== false;
+      const elGuardStatus = document.getElementById("mt5LifespanGuardStatus");
+      if (elGuardStatus) {
+        elGuardStatus.textContent = autoCloseOnExpiryEnabled ? `Active (Auto-closes at Bar ${currentForecastCandles})` : "Disabled in Settings";
+        elGuardStatus.style.color = autoCloseOnExpiryEnabled ? "var(--accent-cyan)" : "var(--text-muted)";
       }
     }
   } catch (e) {
@@ -1139,12 +1147,14 @@ async function executeActiveSignalOnMt5() {
       body: JSON.stringify({
         symbol: sig.symbol,
         direction: dirText,
+        timeframe: sig.timeframe || currentTimeframe || "1h",
+        entry_price: sig.entry_price,
         dollar_risk: risk,
         sl: sig.stop_loss,
         tp: sig.take_profit_1,
         tp2: sig.take_profit_2,
         split_tp: isSplit,
-        comment: `AI ${sig.timeframe || "1h"}`
+        comment: `AI ${sig.timeframe || currentTimeframe || "1h"}`
       })
     });
 
@@ -2195,6 +2205,13 @@ function setupEventListeners() {
 
     if (currentActiveSetupSignal) {
       updateMt5ExecutionControls(currentActiveSetupSignal);
+    }
+
+    autoCloseOnExpiryEnabled = stratData.auto_close_on_expiry !== false;
+    const elGuardStatus = document.getElementById("mt5LifespanGuardStatus");
+    if (elGuardStatus) {
+      elGuardStatus.textContent = autoCloseOnExpiryEnabled ? `Active (Auto-closes at Bar ${currentForecastCandles})` : "Disabled in Settings";
+      elGuardStatus.style.color = autoCloseOnExpiryEnabled ? "var(--accent-cyan)" : "var(--text-muted)";
     }
 
     closeSettings();

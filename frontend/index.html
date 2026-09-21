@@ -300,6 +300,12 @@
                 </div>
               </div>
 
+              <!-- Lifespan Guard Status Tag -->
+              <div id="mt5LifespanGuardNotice" style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; padding: 4px 6px; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 4px; margin-bottom: 8px; color: var(--accent-cyan);">
+                <span>🛡️ Lifespan Expiry Guard:</span>
+                <span id="mt5LifespanGuardStatus" style="font-weight: 600;">Active (Auto-closes at Bar 5)</span>
+              </div>
+
               <!-- Big Execution Action Button -->
               <button class="btn-execute-mt5" id="btnExecuteMt5Trade" style="width: 100%; padding: 10px; font-size: 12px; font-weight: 700; border-radius: 4px; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease;">
                 <span id="btnExecuteMt5Icon">⚡</span>
@@ -497,9 +503,14 @@
               </div>
             </div>
 
-            <!-- MetaTrader 5 Auto-Execution & Risk Management -->
+            <!-- MetaTrader 5 Execution & Risk Management -->
             <div class="form-section">
-              <div class="section-title">⚡ MetaTrader 5 Auto-Execution &amp; Risk Management</div>
+              <div class="section-title">⚡ MetaTrader 5 Execution &amp; Risk Management</div>
+
+              <!-- Subsection 1: Automated Signals -->
+              <div style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); margin: 6px 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(0, 242, 254, 0.2); padding-bottom: 4px;">
+                🤖 Automated Signal Execution Engine
+              </div>
               <div class="form-group toggle-group">
                 <label for="autoTradeEnabled">Enable Auto-Trade Execution on MT5</label>
                 <input type="checkbox" id="autoTradeEnabled" />
@@ -530,6 +541,11 @@
                 <small>Select which timeframes are permitted to automatically place trades on MT5.</small>
               </div>
 
+              <!-- Subsection 2: Position Sizing & Lifespan Guard (Applies to Auto & Manual Trades) -->
+              <div style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); margin: 16px 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(0, 242, 254, 0.2); padding-bottom: 4px;">
+                🛡️ Position Sizing &amp; Lifespan Guard (Auto &amp; Manual 1-Click Trades)
+              </div>
+
               <div class="form-group">
                 <label for="defaultDollarRisk">Default Trade Risk ($ Amount)</label>
                 <input type="number" id="defaultDollarRisk" min="5" max="10000" step="5" value="50" />
@@ -546,10 +562,10 @@
               </div>
 
               <div class="form-group toggle-group">
-                <label for="autoCloseOnExpiry">Auto-Close MT5 Positions on Signal Lifespan Expiry</label>
+                <label for="autoCloseOnExpiry">Auto-Close MT5 Positions on Signal Lifespan Expiry (Auto &amp; 1-Click Trades)</label>
                 <input type="checkbox" id="autoCloseOnExpiry" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically closes open MT5 positions at market price when the signal reaches its lifespan candle horizon (e.g. 5th candle) without hitting TP or SL.</small>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically closes open MT5 positions at market price when the signal reaches its lifespan candle horizon (e.g. 5th candle) without hitting TP or SL. Protects BOTH Automated AI executions and Manual 1-Click trades placed from the terminal.</small>
             </div>
 
             <div class="modal-footer">
