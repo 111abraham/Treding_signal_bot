@@ -103,6 +103,9 @@ const btnExecuteMt5Trade = document.getElementById("btnExecuteMt5Trade");
 const btnExecuteMt5Text = document.getElementById("btnExecuteMt5Text");
 const mt5TradeFeedback = document.getElementById("mt5TradeFeedback");
 const mt5ExecBrokerTag = document.getElementById("mt5ExecBrokerTag");
+const btnTpModeSingle = document.getElementById("btnTpModeSingle");
+const btnTpModeSplit = document.getElementById("btnTpModeSplit");
+let currentTpMode = "single";
 let currentActiveSetupSignal = null;
 
 // Performance & Outcome DOM Elements
@@ -361,6 +364,20 @@ async function loadInitialSettings() {
       showCountdownTimers = cfg.strategy?.show_countdown_timers !== false;
       showChartTradeMarkers = cfg.strategy?.show_chart_trade_markers !== false;
       currentForecastCandles = cfg.forecast_candles || 5;
+
+      const defaultRisk = cfg.strategy?.default_dollar_risk || 50;
+      if (tradeRiskAmount) {
+        tradeRiskAmount.value = defaultRisk;
+        document.querySelectorAll(".risk-pill-btn").forEach((p) => {
+          p.classList.toggle("active", parseFloat(p.dataset.risk) === defaultRisk);
+        });
+      }
+
+      currentTpMode = cfg.strategy?.split_tp_mode ? "split" : "single";
+      if (btnTpModeSingle && btnTpModeSplit) {
+        btnTpModeSingle.classList.toggle("active", currentTpMode === "single");
+        btnTpModeSplit.classList.toggle("active", currentTpMode === "split");
+      }
     }
   } catch (e) {
     console.debug("Failed loading initial settings:", e);
@@ -1019,27 +1036,74 @@ async function updateMt5ExecutionControls(signal) {
 
   const risk = parseFloat(tradeRiskAmount ? tradeRiskAmount.value : 50) || 50;
   const isBuy = signal.direction === "BULLISH";
+  const isSplit = currentTpMode === "split";
 
   try {
-    const res = await fetch("/api/mt5/calculate-lots", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        symbol: signal.symbol,
-        entry_price: signal.entry_price,
-        stop_loss: signal.stop_loss,
-        dollar_risk: risk,
-        take_profit: signal.take_profit_1
-      })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (tradeCalculatedLots) tradeCalculatedLots.textContent = `${data.lots} Lots`;
-      if (tradeProjectedLoss) tradeProjectedLoss.textContent = `-$${(data.actual_loss_at_sl || risk).toFixed(2)}`;
-      if (tradeProjectedReward) tradeProjectedReward.textContent = `+$${(data.actual_reward_at_tp || 0).toFixed(2)}`;
-      if (tradeProjectedRR) tradeProjectedRR.textContent = `1 : ${data.rr_ratio || signal.risk_reward_ratio || "--"}`;
-      if (mt5ExecBrokerTag && data.broker_symbol) {
-        mt5ExecBrokerTag.textContent = `${data.broker_symbol} (FundedNext)`;
+    if (isSplit && signal.take_profit_2) {
+      const halfRisk = risk / 2.0;
+      const [res1, res2] = await Promise.all([
+        fetch("/api/mt5/calculate-lots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symbol: signal.symbol,
+            entry_price: signal.entry_price,
+            stop_loss: signal.stop_loss,
+            dollar_risk: halfRisk,
+            take_profit: signal.take_profit_1
+          })
+        }),
+        fetch("/api/mt5/calculate-lots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symbol: signal.symbol,
+            entry_price: signal.entry_price,
+            stop_loss: signal.stop_loss,
+            dollar_risk: halfRisk,
+            take_profit: signal.take_profit_2
+          })
+        })
+      ]);
+
+      if (res1.ok && res2.ok) {
+        const data1 = await res1.json();
+        const data2 = await res2.json();
+        const totLoss = ((data1.actual_loss_at_sl || halfRisk) + (data2.actual_loss_at_sl || halfRisk)).toFixed(2);
+        const rew1 = data1.actual_reward_at_tp || 0;
+        const rew2 = data2.actual_reward_at_tp || 0;
+        const totRew = (rew1 + rew2).toFixed(2);
+
+        if (tradeCalculatedLots) tradeCalculatedLots.textContent = `${data1.lots} + ${data2.lots} (50/50)`;
+        if (tradeProjectedLoss) tradeProjectedLoss.textContent = `-$${totLoss} (Capped)`;
+        if (tradeProjectedReward) tradeProjectedReward.textContent = `+$${totRew} (TP1+TP2)`;
+        const combRR = (Number(totRew) / Math.max(1, Number(totLoss))).toFixed(2);
+        if (tradeProjectedRR) tradeProjectedRR.textContent = `1 : ${combRR} (Avg)`;
+        if (mt5ExecBrokerTag && data1.broker_symbol) {
+          mt5ExecBrokerTag.textContent = `${data1.broker_symbol} (FundedNext)`;
+        }
+      }
+    } else {
+      const res = await fetch("/api/mt5/calculate-lots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: signal.symbol,
+          entry_price: signal.entry_price,
+          stop_loss: signal.stop_loss,
+          dollar_risk: risk,
+          take_profit: signal.take_profit_1
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (tradeCalculatedLots) tradeCalculatedLots.textContent = `${data.lots} Lots`;
+        if (tradeProjectedLoss) tradeProjectedLoss.textContent = `-$${(data.actual_loss_at_sl || risk).toFixed(2)}`;
+        if (tradeProjectedReward) tradeProjectedReward.textContent = `+$${(data.actual_reward_at_tp || 0).toFixed(2)}`;
+        if (tradeProjectedRR) tradeProjectedRR.textContent = `1 : ${data.rr_ratio || signal.risk_reward_ratio || "--"}`;
+        if (mt5ExecBrokerTag && data.broker_symbol) {
+          mt5ExecBrokerTag.textContent = `${data.broker_symbol} (FundedNext)`;
+        }
       }
     }
   } catch (e) {
@@ -1049,8 +1113,9 @@ async function updateMt5ExecutionControls(signal) {
   btnExecuteMt5Trade.disabled = false;
   btnExecuteMt5Trade.className = isBuy ? "btn-execute-mt5 buy" : "btn-execute-mt5 sell";
   const dirText = isBuy ? "BUY" : "SELL";
+  const modeTag = isSplit ? " [Split 50/50]" : "";
   if (btnExecuteMt5Text) {
-    btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${signal.symbol})`;
+    btnExecuteMt5Text.textContent = `⚡ Place ${dirText}${modeTag} on MT5 (${signal.symbol})`;
   }
 }
 
@@ -1061,9 +1126,10 @@ async function executeActiveSignalOnMt5() {
   const risk = parseFloat(tradeRiskAmount ? tradeRiskAmount.value : 50) || 50;
   const isBuy = sig.direction === "BULLISH";
   const dirText = isBuy ? "BUY" : "SELL";
+  const isSplit = currentTpMode === "split";
 
   btnExecuteMt5Trade.disabled = true;
-  if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⏳ Placing ${dirText} on MT5...`;
+  if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⏳ Placing ${dirText}${isSplit ? " (Split 50/50)" : ""} on MT5...`;
   if (mt5TradeFeedback) mt5TradeFeedback.style.display = "none";
 
   try {
@@ -1076,6 +1142,8 @@ async function executeActiveSignalOnMt5() {
         dollar_risk: risk,
         sl: sig.stop_loss,
         tp: sig.take_profit_1,
+        tp2: sig.take_profit_2,
+        split_tp: isSplit,
         comment: `AI ${sig.timeframe || "1h"}`
       })
     });
@@ -1084,10 +1152,15 @@ async function executeActiveSignalOnMt5() {
     if (res.ok && data.success) {
       if (mt5TradeFeedback) {
         mt5TradeFeedback.className = "mt5-feedback-success";
-        mt5TradeFeedback.innerHTML = `🎉 <b>Order Executed!</b> Ticket <b>#${data.ticket}</b><br/>${data.volume} Lots of ${data.symbol} @ ${formatPrice(data.price)}<br/><small style="color:var(--text-muted)">SL: ${formatPrice(data.sl)} | TP: ${formatPrice(data.tp)}</small>`;
+        if (data.split) {
+          mt5TradeFeedback.innerHTML = `🎉 <b>Split Orders Executed!</b> Tickets <b>#${data.tickets.join(", #")}</b><br/>Order 1: ${data.orders[0]?.volume || ""} Lots to TP1 | Order 2: ${data.orders[1]?.volume || ""} Lots to TP2<br/><small style="color:var(--text-muted)">Total Max Risk Capped at $${risk.toFixed(2)}</small>`;
+        } else {
+          mt5TradeFeedback.innerHTML = `🎉 <b>Order Executed!</b> Ticket <b>#${data.ticket}</b><br/>${data.volume} Lots of ${data.symbol} @ ${formatPrice(data.price)}<br/><small style="color:var(--text-muted)">SL: ${formatPrice(data.sl)} | TP: ${formatPrice(data.tp)}</small>`;
+        }
         mt5TradeFeedback.style.display = "block";
       }
-      if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `✅ Order #${data.ticket} Placed!`;
+      const ticketStr = data.split ? data.tickets.join(", #") : data.ticket;
+      if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `✅ Order #${ticketStr} Placed!`;
       setTimeout(() => {
         btnExecuteMt5Trade.disabled = false;
         if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
@@ -1886,6 +1959,22 @@ function setupEventListeners() {
   }
 
   // 1-Click MT5 Execution: Risk quick pills ($25, $50, $100, $250)
+  let riskDebounceTimer = null;
+  function saveRiskPreference(riskVal) {
+    clearTimeout(riskDebounceTimer);
+    riskDebounceTimer = setTimeout(async () => {
+      try {
+        await fetch("/api/settings/strategy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ default_dollar_risk: parseFloat(riskVal) || 50 })
+        });
+      } catch (e) {
+        console.debug("Failed saving risk preference:", e);
+      }
+    }, 800);
+  }
+
   document.querySelectorAll(".risk-pill-btn").forEach((pill) => {
     pill.addEventListener("click", () => {
       document.querySelectorAll(".risk-pill-btn").forEach((p) => p.classList.remove("active"));
@@ -1893,6 +1982,7 @@ function setupEventListeners() {
       const r = pill.dataset.risk;
       if (tradeRiskAmount) {
         tradeRiskAmount.value = r;
+        saveRiskPreference(r);
         if (currentActiveSetupSignal) {
           updateMt5ExecutionControls(currentActiveSetupSignal);
         }
@@ -1905,6 +1995,28 @@ function setupEventListeners() {
       document.querySelectorAll(".risk-pill-btn").forEach((p) => {
         p.classList.toggle("active", p.dataset.risk === tradeRiskAmount.value);
       });
+      saveRiskPreference(tradeRiskAmount.value);
+      if (currentActiveSetupSignal) {
+        updateMt5ExecutionControls(currentActiveSetupSignal);
+      }
+    });
+  }
+
+  // TP Mode Selector pills (Single TP1 vs Split 50/50 TP1 & TP2)
+  if (btnTpModeSingle && btnTpModeSplit) {
+    btnTpModeSingle.addEventListener("click", () => {
+      btnTpModeSingle.classList.add("active");
+      btnTpModeSplit.classList.remove("active");
+      currentTpMode = "single";
+      if (currentActiveSetupSignal) {
+        updateMt5ExecutionControls(currentActiveSetupSignal);
+      }
+    });
+
+    btnTpModeSplit.addEventListener("click", () => {
+      btnTpModeSplit.classList.add("active");
+      btnTpModeSingle.classList.remove("active");
+      currentTpMode = "split";
       if (currentActiveSetupSignal) {
         updateMt5ExecutionControls(currentActiveSetupSignal);
       }
@@ -1986,6 +2098,22 @@ function setupEventListeners() {
       if (elTfmEnabled) elTfmEnabled.checked = tfm.enabled !== false;
       if (elTfmSuppress) elTfmSuppress.checked = tfm.suppress_on_conflict === true;
       if (elTfmBoost) elTfmBoost.value = tfm.conviction_boost ?? 12;
+
+      // Populate MT5 Auto-Execution & Risk Management
+      const strat = cfg.strategy || {};
+      const elAutoTrade = document.getElementById("autoTradeEnabled");
+      const elAutoConv = document.getElementById("autoTradeMinConviction");
+      const elAutoDualAi = document.getElementById("autoTradeDualAiOnly");
+      const elDefRisk = document.getElementById("defaultDollarRisk");
+      const elTpMode = document.getElementById("tpExecutionMode");
+      const elAutoClose = document.getElementById("autoCloseOnExpiry");
+
+      if (elAutoTrade) elAutoTrade.checked = strat.auto_trade_enabled === true;
+      if (elAutoConv) elAutoConv.value = strat.auto_trade_min_conviction ?? 80;
+      if (elAutoDualAi) elAutoDualAi.checked = strat.auto_trade_dual_ai_only !== false;
+      if (elDefRisk) elDefRisk.value = strat.default_dollar_risk ?? 50;
+      if (elTpMode) elTpMode.value = strat.split_tp_mode ? "split" : "single";
+      if (elAutoClose) elAutoClose.checked = strat.auto_close_on_expiry !== false;
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -2019,6 +2147,12 @@ function setupEventListeners() {
       timesfm_enabled: document.getElementById("timesfmEnabled")?.checked !== false,
       timesfm_suppress_on_conflict: document.getElementById("timesfmSuppressConflict")?.checked === true,
       timesfm_conviction_boost: parseFloat(document.getElementById("timesfmBoost")?.value || 12),
+      auto_trade_enabled: document.getElementById("autoTradeEnabled")?.checked === true,
+      auto_trade_min_conviction: parseFloat(document.getElementById("autoTradeMinConviction")?.value || 80),
+      auto_trade_dual_ai_only: document.getElementById("autoTradeDualAiOnly")?.checked !== false,
+      default_dollar_risk: parseFloat(document.getElementById("defaultDollarRisk")?.value || 50),
+      split_tp_mode: document.getElementById("tpExecutionMode")?.value === "split",
+      auto_close_on_expiry: document.getElementById("autoCloseOnExpiry")?.checked !== false,
     };
 
     currentForecastCandles = stratData.forecast_candles;
@@ -2036,6 +2170,24 @@ function setupEventListeners() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(stratData),
     });
+
+    // Sync UI with saved settings
+    if (tradeRiskAmount && stratData.default_dollar_risk) {
+      tradeRiskAmount.value = stratData.default_dollar_risk;
+      document.querySelectorAll(".risk-pill-btn").forEach((p) => {
+        p.classList.toggle("active", parseFloat(p.dataset.risk) === stratData.default_dollar_risk);
+      });
+    }
+
+    currentTpMode = stratData.split_tp_mode ? "split" : "single";
+    if (btnTpModeSingle && btnTpModeSplit) {
+      btnTpModeSingle.classList.toggle("active", currentTpMode === "single");
+      btnTpModeSplit.classList.toggle("active", currentTpMode === "split");
+    }
+
+    if (currentActiveSetupSignal) {
+      updateMt5ExecutionControls(currentActiveSetupSignal);
+    }
 
     closeSettings();
     renderChartTradeMarkers();

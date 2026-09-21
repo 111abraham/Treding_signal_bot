@@ -271,6 +271,15 @@
                 </div>
               </div>
 
+              <!-- TP Mode Selector (Single TP1 vs Split 50/50 TP1 & TP2) -->
+              <div class="tp-mode-selector-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 11px;">
+                <span style="color: var(--text-secondary); white-space: nowrap;">TP Mode:</span>
+                <div class="tp-mode-pills" style="display: flex; gap: 4px;">
+                  <button type="button" class="tp-pill-btn active" id="btnTpModeSingle" data-mode="single" title="Single target: 100% volume exits at TP1">Single TP1</button>
+                  <button type="button" class="tp-pill-btn" id="btnTpModeSplit" data-mode="split" title="Split 50/50: 2 orders (50% risk to TP1, 50% risk to TP2 runner)">Split 50/50</button>
+                </div>
+              </div>
+
               <!-- Computed Lot & Loss/Gain Summary -->
               <div class="risk-summary-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; border: 1px dashed rgba(255,255,255,0.1); margin-bottom: 10px; font-size: 11px;">
                 <div>
@@ -486,6 +495,49 @@
                 <input type="number" id="timesfmBoost" min="5" max="25" value="12" />
                 <small>Bonus confidence % awarded when both AI models agree on 5-candle trajectory.</small>
               </div>
+            </div>
+
+            <!-- MetaTrader 5 Auto-Execution & Risk Management -->
+            <div class="form-section">
+              <div class="section-title">⚡ MetaTrader 5 Auto-Execution &amp; Risk Management</div>
+              <div class="form-group toggle-group">
+                <label for="autoTradeEnabled">Enable Auto-Trade Execution on MT5</label>
+                <input type="checkbox" id="autoTradeEnabled" />
+              </div>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically dispatches market orders to FundedNext MT5 whenever an actionable signal meets the high-conviction criteria below.</small>
+              
+              <div class="form-group">
+                <label for="autoTradeMinConviction">Auto-Trade Minimum Conviction %</label>
+                <input type="number" id="autoTradeMinConviction" min="50" max="95" value="80" />
+                <small>Only triggers automatic execution on exceptionally strong AI setups (Recommended: &ge; 80%).</small>
+              </div>
+
+              <div class="form-group toggle-group">
+                <label for="autoTradeDualAiOnly">Require Dual AI Confirmation (TimesFM Agreement)</label>
+                <input type="checkbox" id="autoTradeDualAiOnly" checked />
+              </div>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Restricts auto-execution to setups where both the Primary AI Model and Google TimesFM agree in direction.</small>
+
+              <div class="form-group">
+                <label for="defaultDollarRisk">Default Trade Risk ($ Amount)</label>
+                <input type="number" id="defaultDollarRisk" min="5" max="10000" step="5" value="50" />
+                <small>The dollar amount to risk per trade. Volume in lots is automatically calculated based on the dynamic SL distance so maximum loss matches this value exactly. Also synced to Telegram signal alerts.</small>
+              </div>
+
+              <div class="form-group">
+                <label for="tpExecutionMode">Take-Profit Execution Mode</label>
+                <select id="tpExecutionMode">
+                  <option value="single">Single Target (100% Volume to TP1)</option>
+                  <option value="split">Split 50/50 Mode (50% Volume to TP1, 50% to TP2 Runner)</option>
+                </select>
+                <small>In Split 50/50 Mode, total dollar risk is split in half across two orders, keeping total max loss capped at your chosen risk while capturing extended runner profits.</small>
+              </div>
+
+              <div class="form-group toggle-group">
+                <label for="autoCloseOnExpiry">Auto-Close MT5 Positions on Signal Lifespan Expiry</label>
+                <input type="checkbox" id="autoCloseOnExpiry" checked />
+              </div>
+              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically closes open MT5 positions at market price when the signal reaches its lifespan candle horizon (e.g. 5th candle) without hitting TP or SL.</small>
             </div>
 
             <div class="modal-footer">

@@ -118,6 +118,11 @@ class StrategySettingsRequest(BaseModel):
     timesfm_conviction_boost: Optional[float] = None
     timesfm_suppress_on_conflict: Optional[bool] = None
     default_dollar_risk: Optional[float] = None
+    auto_trade_enabled: Optional[bool] = None
+    auto_trade_min_conviction: Optional[float] = None
+    auto_trade_dual_ai_only: Optional[bool] = None
+    split_tp_mode: Optional[bool] = None
+    auto_close_on_expiry: Optional[bool] = None
 
 
 class CalculateLotsRequest(BaseModel):
@@ -135,7 +140,14 @@ class ExecuteOrderRequest(BaseModel):
     lots: Optional[float] = None
     sl: Optional[float] = None
     tp: Optional[float] = None
+    tp2: Optional[float] = None
+    split_tp: Optional[bool] = False
     comment: Optional[str] = "AI Quant Signal"
+
+
+class ClosePositionRequest(BaseModel):
+    ticket: int
+    comment: Optional[str] = "Manual Close"
 
 
 # Routes
@@ -222,10 +234,21 @@ async def execute_mt5_order(req: ExecuteOrderRequest):
         lots=req.lots,
         sl=req.sl,
         tp=req.tp,
+        tp2=req.tp2,
+        split_tp=req.split_tp or False,
         comment=req.comment or "AI Quant Terminal"
     )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Order execution failed"))
+    return result
+
+
+@app.post("/api/mt5/close-position")
+async def close_mt5_position(req: ClosePositionRequest):
+    """Closes an open position on MetaTrader 5 terminal at market price."""
+    result = mt5_bridge.close_position(ticket=req.ticket, comment=req.comment or "Manual Close")
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to close position"))
     return result
 
 
@@ -477,6 +500,18 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         strat["show_countdown_timers"] = req.show_countdown_timers
     if req.show_chart_trade_markers is not None:
         strat["show_chart_trade_markers"] = req.show_chart_trade_markers
+    if req.default_dollar_risk is not None:
+        strat["default_dollar_risk"] = max(1.0, float(req.default_dollar_risk))
+    if req.auto_trade_enabled is not None:
+        strat["auto_trade_enabled"] = req.auto_trade_enabled
+    if req.auto_trade_min_conviction is not None:
+        strat["auto_trade_min_conviction"] = float(req.auto_trade_min_conviction)
+    if req.auto_trade_dual_ai_only is not None:
+        strat["auto_trade_dual_ai_only"] = req.auto_trade_dual_ai_only
+    if req.split_tp_mode is not None:
+        strat["split_tp_mode"] = req.split_tp_mode
+    if req.auto_close_on_expiry is not None:
+        strat["auto_close_on_expiry"] = req.auto_close_on_expiry
 
     updates["strategy"] = strat
     config_manager.update(updates)

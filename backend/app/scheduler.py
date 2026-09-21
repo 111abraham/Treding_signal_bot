@@ -121,6 +121,43 @@ class ScanEngine:
                                     )
 
                                 if signal.get("is_actionable"):
+                                    # 4b. MetaTrader 5 Auto-Execution Engine
+                                    auto_trade_enabled = bool(strat_cfg.get("auto_trade_enabled", False))
+                                    auto_trade_min_conv = float(strat_cfg.get("auto_trade_min_conviction", 80.0))
+                                    auto_trade_dual_ai_only = bool(strat_cfg.get("auto_trade_dual_ai_only", True))
+
+                                    if auto_trade_enabled and signal.get("conviction", 0) >= auto_trade_min_conv:
+                                        dual_ai_ok = True
+                                        if auto_trade_dual_ai_only:
+                                            dual_ai_ok = (signal.get("timesfm_status") == "ready" and signal.get("timesfm_consensus") == "AGREEMENT")
+
+                                        if dual_ai_ok:
+                                            try:
+                                                from app.mt5_bridge import mt5_bridge
+                                                risk_amt = float(strat_cfg.get("default_dollar_risk", 50.0))
+                                                is_split = bool(strat_cfg.get("split_tp_mode", False))
+                                                logger.info(f"⚡ Auto-executing MT5 trade for {sym} ({tf}) - Conviction: {signal.get('conviction')}% | Risk: ${risk_amt} | Split: {is_split}")
+                                                exec_res = await asyncio.to_thread(
+                                                    mt5_bridge.execute_order,
+                                                    symbol=sym,
+                                                    direction=signal["direction"],
+                                                    dollar_risk=risk_amt,
+                                                    sl=signal["stop_loss"],
+                                                    tp=signal["take_profit_1"],
+                                                    tp2=signal.get("take_profit_2"),
+                                                    split_tp=is_split,
+                                                    comment=f"Auto AI {signal.get('conviction'):.0f}%"
+                                                )
+                                                if exec_res.get("success"):
+                                                    tickets = exec_res.get("tickets") or ([exec_res["ticket"]] if "ticket" in exec_res else [])
+                                                    signal["mt5_tickets"] = tickets
+                                                    signal["auto_traded"] = True
+                                                    logger.info(f"✅ Auto-execution successful on MT5 for {sym}: Tickets {tickets}")
+                                                else:
+                                                    logger.warning(f"⚠️ Auto-execution rejected by MT5 broker for {sym}: {exec_res.get('error')}")
+                                            except Exception as e_auto:
+                                                logger.error(f"Error during auto-execution on MT5 for {sym}: {e_auto}")
+
                                     new_signals.append(signal)
                                     self._add_to_history(signal)
                                     outcome_tracker.register_signal(signal)

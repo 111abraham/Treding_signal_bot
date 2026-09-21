@@ -1538,6 +1538,25 @@ body {
   color: #fff;
 }
 
+.tp-pill-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tp-pill-btn:hover,
+.tp-pill-btn.active {
+  background: rgba(0, 242, 254, 0.2);
+  border-color: var(--accent-cyan);
+  color: #fff;
+}
+
 .btn-execute-mt5 {
   background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
   color: #050b14;

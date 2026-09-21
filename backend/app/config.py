@@ -24,7 +24,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "atr_sl_multiplier": 1.5,
         "atr_tp_multiplier": 2.5,
         "show_countdown_timers": True,
-        "show_chart_trade_markers": True
+        "show_chart_trade_markers": True,
+        "auto_trade_enabled": False,
+        "auto_trade_min_conviction": 80.0,
+        "auto_trade_dual_ai_only": True,
+        "default_dollar_risk": 50.0,
+        "split_tp_mode": False,
+        "auto_close_on_expiry": True
     },
     "telegram": {
         "enabled": False,

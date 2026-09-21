@@ -145,6 +145,8 @@ class OutcomeTracker:
             "expires_at_unix": expires_at_unix,
             "max_favorable_price": entry_p,
             "max_adverse_price": entry_p,
+            "mt5_tickets": signal.get("mt5_tickets", []),
+            "auto_traded": bool(signal.get("auto_traded", False)),
             "status": "ACTIVE"
         }
 
@@ -302,6 +304,21 @@ class OutcomeTracker:
                     trade["hit_on_candle"] = hit_candle_idx
                     trade["realized_pnl_pct"] = round(realized_pnl_pct, 2)
                     trade["realized_r"] = round(r_multiple, 2)
+
+                    # Auto-close associated MT5 positions upon lifespan expiration
+                    if outcome.startswith("EXPIRED") and trade.get("mt5_tickets"):
+                        try:
+                            from app.config import config_manager
+                            from app.mt5_bridge import mt5_bridge
+                            strat_cfg = config_manager.get("strategy", {})
+                            if strat_cfg.get("auto_close_on_expiry", True):
+                                for ticket in trade["mt5_tickets"]:
+                                    logger.info(f"Liquidating MT5 ticket #{ticket} on signal lifespan expiration for trade {trade.get('id')}...")
+                                    res_close = mt5_bridge.close_position(ticket, comment=f"AI Expiry ({trade.get('timeframe')})")
+                                    logger.info(f"MT5 ticket #{ticket} close result: {res_close}")
+                                trade["mt5_closed"] = True
+                        except Exception as e_close:
+                            logger.error(f"Failed auto-closing MT5 positions for expired trade {trade.get('id')}: {e_close}")
 
                     self.closed_trades.insert(0, trade)
                     resolved_this_cycle.append(trade)

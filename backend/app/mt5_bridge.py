@@ -417,11 +417,41 @@ class MT5Bridge:
         lots: Optional[float] = None,
         sl: Optional[float] = None,
         tp: Optional[float] = None,
+        tp2: Optional[float] = None,
+        split_tp: bool = False,
         comment: str = "AI Quant Terminal"
     ) -> Dict[str, Any]:
         """
         Places a direct market execution order on MetaTrader 5 terminal with SL and TP.
+        Supports Split TP 50/50 Mode: places 2 half-sized orders targeting TP1 and TP2.
         """
+        if split_tp and tp2 and tp2 > 0:
+            half_risk = (dollar_risk / 2.0) if dollar_risk else None
+            half_lots = (lots / 2.0) if lots else None
+            logger.info(f"Executing Split TP 50/50 order on {symbol}: Half Risk ${half_risk} to TP1, Half Risk to TP2")
+            res1 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp, split_tp=False, comment=f"{comment} (TP1)")
+            res2 = self.execute_order(symbol, direction, dollar_risk=half_risk, lots=half_lots, sl=sl, tp=tp2, split_tp=False, comment=f"{comment} (TP2)")
+            
+            tickets = []
+            if res1.get("success"):
+                tickets.append(res1["ticket"])
+            if res2.get("success"):
+                tickets.append(res2["ticket"])
+
+            if not tickets:
+                return {"success": False, "error": f"Split orders failed: {res1.get('error')} | {res2.get('error')}"}
+
+            return {
+                "success": True,
+                "split": True,
+                "tickets": tickets,
+                "ticket": tickets[0],
+                "symbol": symbol,
+                "direction": direction,
+                "orders": [res1, res2],
+                "comment": f"Split TP1 & TP2 ({len(tickets)} orders placed)"
+            }
+
         if not MT5_AVAILABLE:
             return {"success": False, "error": "MetaTrader 5 Python library not available"}
 
@@ -554,6 +584,82 @@ class MT5Bridge:
         except Exception as e:
             logger.debug(f"Error getting open positions: {e}")
             return []
+
+    def close_position(self, ticket: int, comment: str = "Lifespan Expired") -> Dict[str, Any]:
+        """
+        Closes an open position on MetaTrader 5 terminal at market price.
+        """
+        if not MT5_AVAILABLE:
+            return {"success": False, "error": "MetaTrader 5 library not available"}
+        if not self.is_connected:
+            self.initialize()
+        if not self.is_connected:
+            return {"success": False, "error": "MT5 terminal not connected"}
+
+        positions = mt5.positions_get(ticket=ticket)
+        if not positions:
+            return {"success": False, "error": f"Position #{ticket} not found or already closed"}
+
+        pos = positions[0]
+        sym = pos.symbol
+        mt5.symbol_select(sym, True)
+        tick = mt5.symbol_info_tick(sym)
+        if not tick:
+            return {"success": False, "error": f"No live tick quotes for {sym}"}
+
+        # Opposite order type to close
+        close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+        close_price = float(tick.bid) if pos.type == mt5.ORDER_TYPE_BUY else float(tick.ask)
+
+        sym_info = mt5.symbol_info(sym)
+        filling_mode = mt5.ORDER_FILLING_IOC
+        fill_flags = getattr(sym_info, "filling_mode", 0) if sym_info else 0
+        if fill_flags & 2:
+            filling_mode = mt5.ORDER_FILLING_IOC
+        elif fill_flags & 1:
+            filling_mode = mt5.ORDER_FILLING_FOK
+        else:
+            filling_mode = mt5.ORDER_FILLING_RETURN
+
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "position": ticket,
+            "symbol": sym,
+            "volume": pos.volume,
+            "type": close_type,
+            "price": close_price,
+            "deviation": 25,
+            "magic": pos.magic or 888999,
+            "comment": comment[:31],
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": filling_mode
+        }
+
+        logger.info(f"Dispatching MT5 position close request for #{ticket}: {request}")
+        result = mt5.order_send(request)
+
+        if result is None:
+            err = mt5.last_error()
+            return {"success": False, "error": f"order_send close failed: {err}"}
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "retcode": result.retcode,
+                "error": f"Broker rejected close: {result.comment} (Code {result.retcode})",
+                "comment": result.comment
+            }
+
+        logger.info(f"Position #{ticket} closed successfully at {result.price}!")
+        return {
+            "success": True,
+            "ticket": ticket,
+            "closed_price": result.price,
+            "volume": pos.volume,
+            "symbol": sym,
+            "comment": result.comment,
+            "retcode": result.retcode
+        }
 
 
 # Global MT5 bridge singleton

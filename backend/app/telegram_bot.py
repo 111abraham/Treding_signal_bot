@@ -90,19 +90,41 @@ class TelegramNotifier:
             else:
                 timesfm_line = f"• <b>Google TimesFM:</b> ⏸️ <i>Neutral ({tfm_ret:+0.2f}%)</i>\n"
 
-        # Position Sizing based on dollar risk
+        # Position Sizing based on custom configured dollar risk & Split TP mode
         pos_sizing_str = ""
         try:
+            from app.config import config_manager
             from app.mt5_bridge import mt5_bridge
-            calc_50 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=50.0, take_profit=signal.get("take_profit_1"))
-            calc_100 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=100.0, take_profit=signal.get("take_profit_1"))
-            lots_50 = calc_50.get("lots", 0.01)
-            lots_100 = calc_100.get("lots", 0.02)
-            pos_sizing_str = (
-                f"💰 <b>Position Sizing (FundedNext MT5):</b>\n"
-                f"• <b>$50 Risk:</b> <code>{lots_50} lots</code> (Est. Loss: -${calc_50.get('actual_loss_at_sl', 50)} | TP: +${calc_50.get('actual_reward_at_tp', 0)})\n"
-                f"• <b>$100 Risk:</b> <code>{lots_100} lots</code> (Est. Loss: -${calc_100.get('actual_loss_at_sl', 100)} | TP: +${calc_100.get('actual_reward_at_tp', 0)})\n"
-            )
+            strat_cfg = config_manager.get("strategy", {})
+            user_risk = float(strat_cfg.get("default_dollar_risk", 50.0))
+            is_split = bool(strat_cfg.get("split_tp_mode", False))
+
+            if is_split and signal.get("take_profit_2"):
+                half_risk = user_risk / 2.0
+                calc_tp1 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=half_risk, take_profit=signal.get("take_profit_1"))
+                calc_tp2 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=half_risk, take_profit=signal.get("take_profit_2"))
+                lots_tp1 = calc_tp1.get("lots", 0.01)
+                lots_tp2 = calc_tp2.get("lots", 0.01)
+                tot_loss = round(calc_tp1.get('actual_loss_at_sl', half_risk) + calc_tp2.get('actual_loss_at_sl', half_risk), 2)
+                tot_rew = round(calc_tp1.get('actual_reward_at_tp', 0) + calc_tp2.get('actual_reward_at_tp', 0), 2)
+                pos_sizing_str = (
+                    f"💰 <b>Position Sizing (FundedNext MT5 - ${user_risk:.0f} Risk):</b>\n"
+                    f"• <b>Split 50/50 Mode:</b>\n"
+                    f"  ▫️ Order A (to TP1): <code>{lots_tp1} lots</code> (TP: +${calc_tp1.get('actual_reward_at_tp', 0)})\n"
+                    f"  ▫️ Order B (to TP2): <code>{lots_tp2} lots</code> (TP: +${calc_tp2.get('actual_reward_at_tp', 0)})\n"
+                    f"  ▫️ <b>Total Risk @ SL:</b> -${tot_loss} | <b>Combined TP:</b> +${tot_rew}\n"
+                )
+            else:
+                calc_user = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=user_risk, take_profit=signal.get("take_profit_1"))
+                lots_user = calc_user.get("lots", 0.01)
+                pos_sizing_str = (
+                    f"💰 <b>Position Sizing (FundedNext MT5 - ${user_risk:.0f} Risk):</b>\n"
+                    f"• <b>Custom Risk:</b> <code>{lots_user} lots</code> (Est. Loss: -${calc_user.get('actual_loss_at_sl', user_risk)} | TP: +${calc_user.get('actual_reward_at_tp', 0)})\n"
+                )
+                if abs(user_risk - 100.0) > 1.0:
+                    calc_100 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=100.0, take_profit=signal.get("take_profit_1"))
+                    lots_100 = calc_100.get("lots", 0.02)
+                    pos_sizing_str += f"• <b>$100 Benchmark:</b> <code>{lots_100} lots</code> (Est. Loss: -${calc_100.get('actual_loss_at_sl', 100)} | TP: +${calc_100.get('actual_reward_at_tp', 0)})\n"
         except Exception:
             pass
 
