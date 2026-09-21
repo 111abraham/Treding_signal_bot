@@ -117,6 +117,25 @@ class StrategySettingsRequest(BaseModel):
     timesfm_enabled: Optional[bool] = None
     timesfm_conviction_boost: Optional[float] = None
     timesfm_suppress_on_conflict: Optional[bool] = None
+    default_dollar_risk: Optional[float] = None
+
+
+class CalculateLotsRequest(BaseModel):
+    symbol: str
+    entry_price: float
+    stop_loss: float
+    dollar_risk: float = 50.0
+    take_profit: Optional[float] = None
+
+
+class ExecuteOrderRequest(BaseModel):
+    symbol: str
+    direction: str
+    dollar_risk: Optional[float] = 50.0
+    lots: Optional[float] = None
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    comment: Optional[str] = "AI Quant Signal"
 
 
 # Routes
@@ -178,6 +197,42 @@ async def sync_mt5_universe():
         "synced_count": len(watchlist),
         "watchlist": watchlist
     }
+
+
+@app.post("/api/mt5/calculate-lots")
+async def calculate_lots(req: CalculateLotsRequest):
+    """Calculates position size in lots based on dollar risk ($) and SL distance."""
+    result = mt5_bridge.calculate_lot_size(
+        symbol=req.symbol,
+        entry_price=req.entry_price,
+        stop_loss=req.stop_loss,
+        dollar_risk=req.dollar_risk,
+        take_profit=req.take_profit
+    )
+    return result
+
+
+@app.post("/api/mt5/execute-order")
+async def execute_mt5_order(req: ExecuteOrderRequest):
+    """Executes a live market order directly on FundedNext MetaTrader 5."""
+    result = mt5_bridge.execute_order(
+        symbol=req.symbol,
+        direction=req.direction,
+        dollar_risk=req.dollar_risk,
+        lots=req.lots,
+        sl=req.sl,
+        tp=req.tp,
+        comment=req.comment or "AI Quant Terminal"
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Order execution failed"))
+    return result
+
+
+@app.get("/api/mt5/positions")
+async def get_mt5_positions():
+    """Returns currently open positions on MetaTrader 5."""
+    return {"positions": mt5_bridge.get_open_positions()}
 
 
 @app.get("/api/watchlist")

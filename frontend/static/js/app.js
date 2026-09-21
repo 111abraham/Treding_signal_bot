@@ -92,6 +92,19 @@ const lvlDualAi = document.getElementById("lvlDualAi");
 const timesfmPill = document.getElementById("timesfmPill");
 const timesfmValue = document.getElementById("timesfmValue");
 
+// 1-Click MT5 Execution Elements
+const mt5ExecutionBox = document.getElementById("mt5ExecutionBox");
+const tradeRiskAmount = document.getElementById("tradeRiskAmount");
+const tradeCalculatedLots = document.getElementById("tradeCalculatedLots");
+const tradeProjectedLoss = document.getElementById("tradeProjectedLoss");
+const tradeProjectedReward = document.getElementById("tradeProjectedReward");
+const tradeProjectedRR = document.getElementById("tradeProjectedRR");
+const btnExecuteMt5Trade = document.getElementById("btnExecuteMt5Trade");
+const btnExecuteMt5Text = document.getElementById("btnExecuteMt5Text");
+const mt5TradeFeedback = document.getElementById("mt5TradeFeedback");
+const mt5ExecBrokerTag = document.getElementById("mt5ExecBrokerTag");
+let currentActiveSetupSignal = null;
+
 // Performance & Outcome DOM Elements
 const statWinRate = document.getElementById("statWinRate");
 const statProfitFactor = document.getElementById("statProfitFactor");
@@ -900,6 +913,7 @@ function updateGuardrailsAndLevels(signal, currentClose) {
     spreadMeterFill.style.width = "0%";
     spreadStatusPill.className = "guardrail-status-pill";
     spreadStatusPill.textContent = "No active trade setup";
+    updateMt5ExecutionControls(null);
     return;
   }
 
@@ -909,6 +923,7 @@ function updateGuardrailsAndLevels(signal, currentClose) {
   lvlTP1.textContent = formatPrice(signal.take_profit_1);
   lvlTP2.textContent = formatPrice(signal.take_profit_2);
   lvlRR.textContent = `1 : ${signal.risk_reward_ratio}`;
+  updateMt5ExecutionControls(signal);
 
   if (rowDualAi) {
     if (signal.dual_ai_confluence) {
@@ -984,6 +999,118 @@ function updateGuardrailsAndLevels(signal, currentClose) {
     spreadMeterFill.classList.add("warning");
     spreadStatusPill.className = "guardrail-status-pill danger";
     spreadStatusPill.innerHTML = `⚠️ <b>FILTERED:</b> Spread is ${ratioPct}% (&gt; 5% SL distance)`;
+  }
+}
+
+async function updateMt5ExecutionControls(signal) {
+  currentActiveSetupSignal = signal;
+  if (!btnExecuteMt5Trade) return;
+
+  if (!signal || !signal.entry_price || !signal.stop_loss) {
+    if (tradeCalculatedLots) tradeCalculatedLots.textContent = "-- Lots";
+    if (tradeProjectedLoss) tradeProjectedLoss.textContent = "--";
+    if (tradeProjectedReward) tradeProjectedReward.textContent = "--";
+    if (tradeProjectedRR) tradeProjectedRR.textContent = "--";
+    btnExecuteMt5Trade.disabled = true;
+    btnExecuteMt5Trade.className = "btn-execute-mt5";
+    if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = "No Active Setup Selected";
+    return;
+  }
+
+  const risk = parseFloat(tradeRiskAmount ? tradeRiskAmount.value : 50) || 50;
+  const isBuy = signal.direction === "BULLISH";
+
+  try {
+    const res = await fetch("/api/mt5/calculate-lots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        symbol: signal.symbol,
+        entry_price: signal.entry_price,
+        stop_loss: signal.stop_loss,
+        dollar_risk: risk,
+        take_profit: signal.take_profit_1
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (tradeCalculatedLots) tradeCalculatedLots.textContent = `${data.lots} Lots`;
+      if (tradeProjectedLoss) tradeProjectedLoss.textContent = `-$${(data.actual_loss_at_sl || risk).toFixed(2)}`;
+      if (tradeProjectedReward) tradeProjectedReward.textContent = `+$${(data.actual_reward_at_tp || 0).toFixed(2)}`;
+      if (tradeProjectedRR) tradeProjectedRR.textContent = `1 : ${data.rr_ratio || signal.risk_reward_ratio || "--"}`;
+      if (mt5ExecBrokerTag && data.broker_symbol) {
+        mt5ExecBrokerTag.textContent = `${data.broker_symbol} (FundedNext)`;
+      }
+    }
+  } catch (e) {
+    console.debug("Error calculating lots:", e);
+  }
+
+  btnExecuteMt5Trade.disabled = false;
+  btnExecuteMt5Trade.className = isBuy ? "btn-execute-mt5 buy" : "btn-execute-mt5 sell";
+  const dirText = isBuy ? "BUY" : "SELL";
+  if (btnExecuteMt5Text) {
+    btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${signal.symbol})`;
+  }
+}
+
+async function executeActiveSignalOnMt5() {
+  if (!currentActiveSetupSignal || !btnExecuteMt5Trade) return;
+
+  const sig = currentActiveSetupSignal;
+  const risk = parseFloat(tradeRiskAmount ? tradeRiskAmount.value : 50) || 50;
+  const isBuy = sig.direction === "BULLISH";
+  const dirText = isBuy ? "BUY" : "SELL";
+
+  btnExecuteMt5Trade.disabled = true;
+  if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⏳ Placing ${dirText} on MT5...`;
+  if (mt5TradeFeedback) mt5TradeFeedback.style.display = "none";
+
+  try {
+    const res = await fetch("/api/mt5/execute-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        symbol: sig.symbol,
+        direction: dirText,
+        dollar_risk: risk,
+        sl: sig.stop_loss,
+        tp: sig.take_profit_1,
+        comment: `AI ${sig.timeframe || "1h"}`
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (mt5TradeFeedback) {
+        mt5TradeFeedback.className = "mt5-feedback-success";
+        mt5TradeFeedback.innerHTML = `🎉 <b>Order Executed!</b> Ticket <b>#${data.ticket}</b><br/>${data.volume} Lots of ${data.symbol} @ ${formatPrice(data.price)}<br/><small style="color:var(--text-muted)">SL: ${formatPrice(data.sl)} | TP: ${formatPrice(data.tp)}</small>`;
+        mt5TradeFeedback.style.display = "block";
+      }
+      if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `✅ Order #${data.ticket} Placed!`;
+      setTimeout(() => {
+        btnExecuteMt5Trade.disabled = false;
+        if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
+      }, 5000);
+      loadPerformance();
+    } else {
+      const errMsg = data.detail || data.error || data.comment || "Order execution rejected by broker";
+      if (mt5TradeFeedback) {
+        mt5TradeFeedback.className = "mt5-feedback-error";
+        mt5TradeFeedback.textContent = `❌ ${errMsg}`;
+        mt5TradeFeedback.style.display = "block";
+      }
+      btnExecuteMt5Trade.disabled = false;
+      if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
+    }
+  } catch (err) {
+    if (mt5TradeFeedback) {
+      mt5TradeFeedback.className = "mt5-feedback-error";
+      mt5TradeFeedback.textContent = `❌ Execution Error: ${err.message}`;
+      mt5TradeFeedback.style.display = "block";
+    }
+    btnExecuteMt5Trade.disabled = false;
+    if (btnExecuteMt5Text) btnExecuteMt5Text.textContent = `⚡ Place ${dirText} on FundedNext MT5 (${sig.symbol})`;
   }
 }
 
@@ -1756,6 +1883,36 @@ function setupEventListeners() {
       renderSignalsList();
       renderOutcomesList();
     });
+  }
+
+  // 1-Click MT5 Execution: Risk quick pills ($25, $50, $100, $250)
+  document.querySelectorAll(".risk-pill-btn").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".risk-pill-btn").forEach((p) => p.classList.remove("active"));
+      pill.classList.add("active");
+      const r = pill.dataset.risk;
+      if (tradeRiskAmount) {
+        tradeRiskAmount.value = r;
+        if (currentActiveSetupSignal) {
+          updateMt5ExecutionControls(currentActiveSetupSignal);
+        }
+      }
+    });
+  });
+
+  if (tradeRiskAmount) {
+    tradeRiskAmount.addEventListener("input", () => {
+      document.querySelectorAll(".risk-pill-btn").forEach((p) => {
+        p.classList.toggle("active", p.dataset.risk === tradeRiskAmount.value);
+      });
+      if (currentActiveSetupSignal) {
+        updateMt5ExecutionControls(currentActiveSetupSignal);
+      }
+    });
+  }
+
+  if (btnExecuteMt5Trade) {
+    btnExecuteMt5Trade.addEventListener("click", executeActiveSignalOnMt5);
   }
 
   // HTF Radar View Setup button

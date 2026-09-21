@@ -321,6 +321,240 @@ class MT5Bridge:
         logger.info(f"Successfully synced {len(watchlist)} assets directly from FundedNext MT5!")
         return watchlist
 
+    def calculate_lot_size(
+        self,
+        symbol: str,
+        entry_price: float,
+        stop_loss: float,
+        dollar_risk: float,
+        take_profit: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculates exact broker lot size based on user dollar risk ($), stop-loss distance,
+        and broker contract specifications.
+        """
+        if not self.is_connected:
+            self.initialize()
+
+        clean_sym = symbol.upper().replace("/", "").replace("-", "")
+        broker_sym = self._resolve_broker_symbol(clean_sym) or clean_sym
+
+        sl_distance = abs(entry_price - stop_loss)
+        if sl_distance <= 0 or dollar_risk <= 0:
+            return {
+                "lots": 0.01,
+                "dollar_risk": dollar_risk,
+                "projected_loss": 0.0,
+                "projected_reward": 0.0,
+                "rr_ratio": 0.0,
+                "error": "Invalid SL distance or dollar risk"
+            }
+
+        # Default fallback values
+        tick_size = 0.00001
+        tick_val = 1.0
+        vol_min = 0.01
+        vol_step = 0.01
+        vol_max = 100.0
+
+        if MT5_AVAILABLE and self.is_connected:
+            sym_info = mt5.symbol_info(broker_sym)
+            if sym_info:
+                tick_size = float(sym_info.trade_tick_size) if sym_info.trade_tick_size > 0 else 0.00001
+                tick_val = float(sym_info.trade_tick_value) if sym_info.trade_tick_value > 0 else 1.0
+                vol_min = float(sym_info.volume_min) if sym_info.volume_min > 0 else 0.01
+                vol_step = float(sym_info.volume_step) if sym_info.volume_step > 0 else 0.01
+                vol_max = float(sym_info.volume_max) if sym_info.volume_max > 0 else 100.0
+
+        points = sl_distance / tick_size
+        loss_per_lot = points * tick_val
+
+        if loss_per_lot <= 0:
+            raw_lots = vol_min
+        else:
+            raw_lots = dollar_risk / loss_per_lot
+
+        # Round to volume step
+        step_factor = 1.0 / vol_step
+        rounded_lots = round(raw_lots * step_factor) / step_factor
+        # Clamp between min and max
+        final_lots = max(vol_min, min(vol_max, rounded_lots))
+        digits = 2 if vol_step == 0.01 else (3 if vol_step == 0.001 else 1)
+        final_lots = round(final_lots, digits)
+
+        actual_loss = round(final_lots * loss_per_lot, 2)
+
+        # Projected reward at TP
+        actual_reward = 0.0
+        rr_ratio = 0.0
+        if take_profit and take_profit > 0:
+            tp_dist = abs(take_profit - entry_price)
+            tp_points = tp_dist / tick_size
+            gain_per_lot = tp_points * tick_val
+            actual_reward = round(final_lots * gain_per_lot, 2)
+            rr_ratio = round(actual_reward / max(0.01, actual_loss), 2)
+
+        return {
+            "symbol": symbol,
+            "broker_symbol": broker_sym,
+            "lots": final_lots,
+            "dollar_risk_input": dollar_risk,
+            "actual_loss_at_sl": actual_loss,
+            "actual_reward_at_tp": actual_reward,
+            "rr_ratio": rr_ratio,
+            "vol_min": vol_min,
+            "vol_step": vol_step,
+            "vol_max": vol_max,
+            "tick_value": tick_val,
+            "tick_size": tick_size
+        }
+
+    def execute_order(
+        self,
+        symbol: str,
+        direction: str,
+        dollar_risk: Optional[float] = None,
+        lots: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        comment: str = "AI Quant Terminal"
+    ) -> Dict[str, Any]:
+        """
+        Places a direct market execution order on MetaTrader 5 terminal with SL and TP.
+        """
+        if not MT5_AVAILABLE:
+            return {"success": False, "error": "MetaTrader 5 Python library not available"}
+
+        if not self.is_connected:
+            self.initialize()
+
+        if not self.is_connected:
+            return {"success": False, "error": f"MT5 terminal disconnected: {self.last_error or 'Not running'}"}
+
+        broker_sym = self._resolve_broker_symbol(symbol)
+        if not broker_sym:
+            return {"success": False, "error": f"Symbol '{symbol}' not found on broker terminal"}
+
+        sym_info = mt5.symbol_info(broker_sym)
+        if not sym_info:
+            return {"success": False, "error": f"Failed to retrieve symbol info for '{broker_sym}'"}
+
+        # Ensure symbol selected in market watch
+        mt5.symbol_select(broker_sym, True)
+
+        tick = mt5.symbol_info_tick(broker_sym)
+        if not tick:
+            return {"success": False, "error": f"No live market quotes available for '{broker_sym}'"}
+
+        is_buy = direction.upper() in ["BUY", "BULLISH", "LONG"]
+        order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        exec_price = float(tick.ask) if is_buy else float(tick.bid)
+
+        # Determine lot size
+        vol = lots
+        if (vol is None or vol <= 0) and dollar_risk and dollar_risk > 0:
+            if sl and sl > 0:
+                calc = self.calculate_lot_size(broker_sym, exec_price, sl, dollar_risk, tp)
+                vol = calc.get("lots", sym_info.volume_min)
+            else:
+                vol = sym_info.volume_min
+
+        vol = vol or sym_info.volume_min
+        vol = max(sym_info.volume_min, min(sym_info.volume_max, float(vol)))
+        vol_step = float(sym_info.volume_step) if sym_info.volume_step > 0 else 0.01
+        step_factor = 1.0 / vol_step
+        vol = round(vol * step_factor) / step_factor
+        vol = round(vol, 2 if vol_step == 0.01 else 1)
+
+        # Determine filling mode
+        filling_mode = mt5.ORDER_FILLING_IOC
+        fill_flags = getattr(sym_info, "filling_mode", 0)
+        if fill_flags & 2:
+            filling_mode = mt5.ORDER_FILLING_IOC
+        elif fill_flags & 1:
+            filling_mode = mt5.ORDER_FILLING_FOK
+        else:
+            filling_mode = mt5.ORDER_FILLING_RETURN
+
+        digits = int(sym_info.digits)
+        sl_price = round(float(sl), digits) if sl else 0.0
+        tp_price = round(float(tp), digits) if tp else 0.0
+
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": broker_sym,
+            "volume": vol,
+            "type": order_type,
+            "price": exec_price,
+            "sl": sl_price,
+            "tp": tp_price,
+            "deviation": 20,
+            "magic": 888999,
+            "comment": comment[:31],
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": filling_mode
+        }
+
+        logger.info(f"Dispatching MT5 trade request: {request}")
+        result = mt5.order_send(request)
+
+        if result is None:
+            err = mt5.last_error()
+            return {"success": False, "error": f"order_send returned None: {err}"}
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "retcode": result.retcode,
+                "error": f"Broker rejected order: {result.comment} (Code {result.retcode})",
+                "comment": result.comment
+            }
+
+        logger.info(f"Trade executed successfully! Ticket #{result.order} for {vol} lots of {broker_sym} @ {result.price}")
+        return {
+            "success": True,
+            "ticket": result.order,
+            "deal": getattr(result, "deal", None),
+            "symbol": broker_sym,
+            "direction": "BUY" if is_buy else "SELL",
+            "volume": vol,
+            "price": result.price,
+            "sl": sl_price,
+            "tp": tp_price,
+            "comment": result.comment,
+            "retcode": result.retcode
+        }
+
+    def get_open_positions(self) -> List[Dict[str, Any]]:
+        """Returns currently open positions from MetaTrader 5."""
+        if not MT5_AVAILABLE or not self.is_connected:
+            return []
+        try:
+            positions = mt5.positions_get()
+            if not positions:
+                return []
+            res = []
+            for p in positions:
+                res.append({
+                    "ticket": p.ticket,
+                    "symbol": p.symbol,
+                    "type": "BUY" if p.type == 0 else "SELL",
+                    "volume": p.volume,
+                    "price_open": p.price_open,
+                    "price_current": p.price_current,
+                    "sl": p.sl,
+                    "tp": p.tp,
+                    "profit": p.profit,
+                    "swap": p.swap,
+                    "magic": p.magic,
+                    "comment": p.comment,
+                    "time": datetime.datetime.fromtimestamp(p.time, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                })
+            return res
+        except Exception as e:
+            logger.debug(f"Error getting open positions: {e}")
+            return []
+
 
 # Global MT5 bridge singleton
 mt5_bridge = MT5Bridge()

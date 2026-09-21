@@ -1518,5 +1518,72 @@ body {
   border: 1px solid rgba(255, 82, 82, 0.3);
 }
 
+/* MT5 1-Click Execution Box */
+.risk-pill-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.risk-pill-btn:hover,
+.risk-pill-btn.active {
+  background: rgba(0, 242, 254, 0.2);
+  border-color: var(--accent-cyan);
+  color: #fff;
+}
+
+.btn-execute-mt5 {
+  background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+  color: #050b14;
+  box-shadow: 0 3px 12px rgba(0, 242, 254, 0.25);
+}
+
+.btn-execute-mt5.buy {
+  background: linear-gradient(135deg, #00e676 0%, #00b0ff 100%);
+  color: #031e11;
+  box-shadow: 0 3px 14px rgba(0, 230, 118, 0.3);
+}
+
+.btn-execute-mt5.sell {
+  background: linear-gradient(135deg, #ff5252 0%, #f50057 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 14px rgba(255, 82, 82, 0.3);
+}
+
+.btn-execute-mt5:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.btn-execute-mt5:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-execute-mt5:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: grayscale(0.8);
+}
+
+.mt5-feedback-success {
+  background: rgba(0, 230, 118, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.mt5-feedback-error {
+  background: rgba(255, 82, 82, 0.12);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+
 
 

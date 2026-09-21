@@ -90,6 +90,22 @@ class TelegramNotifier:
             else:
                 timesfm_line = f"• <b>Google TimesFM:</b> ⏸️ <i>Neutral ({tfm_ret:+0.2f}%)</i>\n"
 
+        # Position Sizing based on dollar risk
+        pos_sizing_str = ""
+        try:
+            from app.mt5_bridge import mt5_bridge
+            calc_50 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=50.0, take_profit=signal.get("take_profit_1"))
+            calc_100 = mt5_bridge.calculate_lot_size(symbol, signal["entry_price"], signal["stop_loss"], dollar_risk=100.0, take_profit=signal.get("take_profit_1"))
+            lots_50 = calc_50.get("lots", 0.01)
+            lots_100 = calc_100.get("lots", 0.02)
+            pos_sizing_str = (
+                f"💰 <b>Position Sizing (FundedNext MT5):</b>\n"
+                f"• <b>$50 Risk:</b> <code>{lots_50} lots</code> (Est. Loss: -${calc_50.get('actual_loss_at_sl', 50)} | TP: +${calc_50.get('actual_reward_at_tp', 0)})\n"
+                f"• <b>$100 Risk:</b> <code>{lots_100} lots</code> (Est. Loss: -${calc_100.get('actual_loss_at_sl', 100)} | TP: +${calc_100.get('actual_reward_at_tp', 0)})\n"
+            )
+        except Exception:
+            pass
+
         msg = (
             f"{header_str}"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -108,7 +124,8 @@ class TelegramNotifier:
             f"• <b>AI Conviction:</b> <b>{signal['conviction']}%</b>\n"
             f"{timesfm_line}"
             f"• <b>Exp. 5-Candle Return:</b> <code>{signal['expected_return_pct']:+0.2f}%</code>\n"
-            f"• <b>Engine:</b> <i>{signal.get('model_used', 'AI Quant Model')}</i>\n"
+            f"• <b>Engine:</b> <i>{signal.get('model_used', 'AI Quant Model')}</i>\n\n"
+            f"{pos_sizing_str}"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"⏰ <i>{signal['timestamp']}</i>"
         )
