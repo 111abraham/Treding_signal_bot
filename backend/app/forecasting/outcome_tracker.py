@@ -565,10 +565,24 @@ class OutcomeTracker:
             "stats": self.get_statistics(timeframe=timeframe)
         }
 
-    def export_history(self, timeframe: Optional[str] = None) -> Dict[str, Any]:
-        """Exports trade history database, with optional timeframe filtering."""
+    def export_history(
+        self,
+        timeframe: Optional[str] = None,
+        min_conviction: Optional[float] = None,
+        dual_ai_only: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """Exports trade history database, with optional timeframe, conviction, and Dual AI filtering."""
         closed = self.closed_trades
         active = self.active_trades
+
+        if dual_ai_only:
+            closed = [t for t in closed if t.get("dual_ai_confluence") is True]
+            active = [t for t in active if t.get("dual_ai_confluence") is True]
+
+        if min_conviction is not None and min_conviction > 0:
+            closed = [t for t in closed if float(t.get("conviction", 0)) >= min_conviction]
+            active = [t for t in active if float(t.get("conviction", 0)) >= min_conviction]
+
         if timeframe and timeframe.upper() != "ALL":
             tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
             closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
@@ -578,19 +592,32 @@ class OutcomeTracker:
             "version": "1.0",
             "exported_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "filter_timeframe": timeframe or "ALL",
+            "filter_min_conviction": min_conviction,
+            "filter_dual_ai_only": bool(dual_ai_only),
             "total_closed": len(closed),
             "total_active": len(active),
-            "statistics": self.get_statistics(timeframe=timeframe),
+            "statistics": self.get_statistics(timeframe=timeframe, min_conviction=min_conviction, dual_ai_only=dual_ai_only),
             "active_trades": active,
             "closed_trades": closed
         }
 
-    def export_csv(self, timeframe: Optional[str] = None) -> str:
-        """Exports closed and active trades as a CSV string formatted for Excel / Sheets."""
+    def export_csv(
+        self,
+        timeframe: Optional[str] = None,
+        min_conviction: Optional[float] = None,
+        dual_ai_only: Optional[bool] = None
+    ) -> str:
+        """Exports closed and active trades as a CSV string formatted for Excel / Sheets with optional filters."""
         import io
         import csv
 
         closed = self.closed_trades
+        if dual_ai_only:
+            closed = [t for t in closed if t.get("dual_ai_confluence") is True]
+
+        if min_conviction is not None and min_conviction > 0:
+            closed = [t for t in closed if float(t.get("conviction", 0)) >= min_conviction]
+
         if timeframe and timeframe.upper() != "ALL":
             tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
             closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
@@ -613,9 +640,9 @@ class OutcomeTracker:
                 t.get("conviction", ""),
                 t.get("entry_price", ""),
                 t.get("exit_price", ""),
-                t.get("sl", ""),
-                t.get("tp", ""),
-                t.get("tp2", ""),
+                t.get("stop_loss") or t.get("sl", ""),
+                t.get("take_profit_1") or t.get("tp", ""),
+                t.get("take_profit_2") or t.get("tp2", ""),
                 t.get("outcome", ""),
                 t.get("realized_pnl_pct", ""),
                 t.get("realized_r", ""),

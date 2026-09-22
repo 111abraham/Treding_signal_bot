@@ -695,6 +695,9 @@
           <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; line-height: 1.4;">
             Choose your format and filter. <b>CSV</b> opens directly in <b>Excel</b> for sorting, filtering, and spreadsheet formulas. <b>JSON</b> is for complete backups and terminal re-importing.
           </p>
+          <div id="exportFilterNotice" style="display: none; padding: 6px 10px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 4px; font-size: 11px; margin-bottom: 12px; color: var(--accent-cyan);">
+            🤖 <b>Dual AI Confluence Filter Active:</b> Export will include ONLY trades confirmed by Google TimesFM.
+          </div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <button class="btn btn-primary" id="btnExportCsvAll" style="text-align: left; padding: 10px 14px; font-size: 12px; font-weight: 600;">
               📊 Export All as CSV (Excel Spreadsheet)
@@ -719,6 +722,6 @@
 
   </div>
 
-  <script src="/static/js/app.js?v=4.5"></script>
+  <script src="/static/js/app.js?v=4.6"></script>
 </body>
 </html>

@@ -1919,7 +1919,10 @@ function setupEventListeners() {
   async function downloadExportFile(format, tf = null) {
     try {
       const tfParam = tf && tf.toUpperCase() !== "ALL" ? `&timeframe=${encodeURIComponent(tf)}` : "";
-      const res = await fetch(`/api/performance/export?format=${format}${tfParam}`);
+      const isDualAi = perfDualAiOnly && perfDualAiOnly.checked;
+      const dualParam = isDualAi ? "&dual_ai_only=true" : "";
+      const convParam = currentMinConviction && currentMinConviction > 0 ? `&min_conviction=${currentMinConviction}` : "";
+      const res = await fetch(`/api/performance/export?format=${format}${tfParam}${dualParam}${convParam}`);
       if (!res.ok) throw new Error("Failed to export history");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -1927,8 +1930,9 @@ function setupEventListeners() {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const ext = format === "csv" ? "csv" : "json";
       const tfSuffix = tf && tf.toUpperCase() !== "ALL" ? `_${tf}` : "";
+      const dualSuffix = isDualAi ? "_dual_ai" : "";
       a.href = url;
-      a.download = `trade_history${tfSuffix}_${ts}.${ext}`;
+      a.download = `trade_history${tfSuffix}${dualSuffix}_${ts}.${ext}`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -1951,6 +1955,10 @@ function setupEventListeners() {
         document.querySelectorAll(".export-current-tf-label").forEach((el) => {
           el.textContent = getSelectedTfsDisplay();
         });
+        const elNotice = document.getElementById("exportFilterNotice");
+        if (elNotice) {
+          elNotice.style.display = (perfDualAiOnly && perfDualAiOnly.checked) ? "block" : "none";
+        }
         exportModal.style.display = "flex";
       } else {
         downloadExportFile("json", null);
