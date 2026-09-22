@@ -148,6 +148,18 @@ class OutcomeTracker:
             "mt5_tickets": signal.get("mt5_tickets", []),
             "auto_traded": bool(signal.get("auto_traded", False)),
             "manual_executed": bool(signal.get("manual_executed", False)),
+            "split_tp_mode": bool(signal.get("split_tp_mode", True)),
+            "tp1_hit": False,
+            "tp1_hit_candle": None,
+            "tp1_hit_price": None,
+            "tp1_realized_r": 0.0,
+            "tp1_realized_pnl_pct": 0.0,
+            "runner_active": False,
+            "runner_sl": None,
+            "runner_outcome": None,
+            "runner_exit_price": None,
+            "runner_realized_r": 0.0,
+            "runner_realized_pnl_pct": 0.0,
             "status": "ACTIVE"
         }
 
@@ -225,6 +237,10 @@ class OutcomeTracker:
             entry = trade["entry_price"]
             sl = trade["stop_loss"]
             tp1 = trade["take_profit_1"]
+            tp2 = float(trade.get("take_profit_2") or tp1)
+            split_mode = bool(trade.get("split_tp_mode", True))
+            tp1_hit = bool(trade.get("tp1_hit", False))
+            runner_sl = float(trade.get("runner_sl") or entry)
             entry_unix = trade.get("entry_candle_unix") or trade.get("opened_unix", 0)
 
             try:
@@ -272,41 +288,193 @@ class OutcomeTracker:
                         trade["max_favorable_price"] = max(trade["max_favorable_price"], high)
                         trade["max_adverse_price"] = min(trade["max_adverse_price"], low)
 
-                        # Did it hit Take-Profit 1?
-                        if high >= tp1:
-                            outcome = "WIN"
-                            resolved_price = tp1
-                            exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
-                            hit_candle_idx = bar_num
-                            exit_candle_unix = candle_ts
-                            break
-                        # Did it hit Stop-Loss?
-                        elif low <= sl:
-                            outcome = "LOSS"
-                            resolved_price = sl
-                            exit_reason = f"Stop-Loss hit at {sl:.4f}"
-                            hit_candle_idx = bar_num
-                            exit_candle_unix = candle_ts
-                            break
+                        if not split_mode:
+                            # Standard single-exit mode
+                            if high >= tp1:
+                                outcome = "WIN"
+                                resolved_price = tp1
+                                exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
+                                hit_candle_idx = bar_num
+                                exit_candle_unix = candle_ts
+                                break
+                            elif low <= sl:
+                                outcome = "LOSS"
+                                resolved_price = sl
+                                exit_reason = f"Stop-Loss hit at {sl:.4f}"
+                                hit_candle_idx = bar_num
+                                exit_candle_unix = candle_ts
+                                break
+                        else:
+                            # 50/50 Scale-Out Mode (BULLISH)
+                            if not tp1_hit:
+                                if low <= sl:
+                                    outcome = "LOSS"
+                                    resolved_price = sl
+                                    exit_reason = f"Stop-Loss hit at {sl:.4f}"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
+                                elif high >= tp1:
+                                    tp1_hit = True
+                                    trade["tp1_hit"] = True
+                                    trade["tp1_hit_candle"] = bar_num
+                                    trade["tp1_hit_price"] = tp1
+                                    
+                                    pnl_tp1_full = ((tp1 - entry) / entry) * 100.0
+                                    r_tp1_full = (pnl_tp1_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                    trade["tp1_realized_pnl_pct"] = round(pnl_tp1_full * 0.5, 2)
+                                    trade["tp1_realized_r"] = round(r_tp1_full * 0.5, 2)
+                                    
+                                    trade["runner_active"] = True
+                                    trade["runner_sl"] = entry
+                                    runner_sl = entry
+
+                                    # Auto-adjust live MT5 tickets to Breakeven
+                                    if trade.get("mt5_tickets"):
+                                        try:
+                                            from app.mt5_bridge import mt5_bridge
+                                            for tk in trade["mt5_tickets"]:
+                                                mt5_bridge.modify_position_sl(tk, new_sl=entry)
+                                        except Exception as e_mod:
+                                            logger.debug(f"Auto-breakeven MT5 adjust error: {e_mod}")
+
+                                    # Check if TP2 also touched on this very same candle
+                                    if high >= tp2:
+                                        pnl_tp2_full = ((tp2 - entry) / entry) * 100.0
+                                        r_tp2_full = (pnl_tp2_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                        trade["runner_outcome"] = "TP2_HIT"
+                                        trade["runner_exit_price"] = tp2
+                                        trade["runner_realized_pnl_pct"] = round(pnl_tp2_full * 0.5, 2)
+                                        trade["runner_realized_r"] = round(r_tp2_full * 0.5, 2)
+
+                                        outcome = "WIN"
+                                        resolved_price = tp2
+                                        exit_reason = f"TP1 hit (50% banked) & TP2 reached at {tp2:.4f}"
+                                        hit_candle_idx = bar_num
+                                        exit_candle_unix = candle_ts
+                                        break
+                            else:
+                                # Stage 2: Runner active on subsequent candles
+                                if high >= tp2:
+                                    pnl_tp2_full = ((tp2 - entry) / entry) * 100.0
+                                    r_tp2_full = (pnl_tp2_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                    trade["runner_outcome"] = "TP2_HIT"
+                                    trade["runner_exit_price"] = tp2
+                                    trade["runner_realized_pnl_pct"] = round(pnl_tp2_full * 0.5, 2)
+                                    trade["runner_realized_r"] = round(r_tp2_full * 0.5, 2)
+
+                                    outcome = "WIN"
+                                    resolved_price = tp2
+                                    exit_reason = f"TP1 hit (50% banked) & TP2 reached at {tp2:.4f}"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
+                                elif low <= runner_sl:
+                                    trade["runner_outcome"] = "BREAKEVEN_HIT"
+                                    trade["runner_exit_price"] = entry
+                                    trade["runner_realized_pnl_pct"] = 0.0
+                                    trade["runner_realized_r"] = 0.0
+
+                                    outcome = "WIN"
+                                    resolved_price = entry
+                                    exit_reason = f"TP1 hit (50% banked at {tp1:.4f}), Runner stopped at Breakeven ({entry:.4f})"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
 
                     else:  # BEARISH
                         trade["max_favorable_price"] = min(trade["max_favorable_price"], low)
                         trade["max_adverse_price"] = max(trade["max_adverse_price"], high)
 
-                        if low <= tp1:
-                            outcome = "WIN"
-                            resolved_price = tp1
-                            exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
-                            hit_candle_idx = bar_num
-                            exit_candle_unix = candle_ts
-                            break
-                        elif high >= sl:
-                            outcome = "LOSS"
-                            resolved_price = sl
-                            exit_reason = f"Stop-Loss hit at {sl:.4f}"
-                            hit_candle_idx = bar_num
-                            exit_candle_unix = candle_ts
-                            break
+                        if not split_mode:
+                            if low <= tp1:
+                                outcome = "WIN"
+                                resolved_price = tp1
+                                exit_reason = f"Take-Profit 1 hit at {tp1:.4f}"
+                                hit_candle_idx = bar_num
+                                exit_candle_unix = candle_ts
+                                break
+                            elif high >= sl:
+                                outcome = "LOSS"
+                                resolved_price = sl
+                                exit_reason = f"Stop-Loss hit at {sl:.4f}"
+                                hit_candle_idx = bar_num
+                                exit_candle_unix = candle_ts
+                                break
+                        else:
+                            # 50/50 Scale-Out Mode (BEARISH)
+                            if not tp1_hit:
+                                if high >= sl:
+                                    outcome = "LOSS"
+                                    resolved_price = sl
+                                    exit_reason = f"Stop-Loss hit at {sl:.4f}"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
+                                elif low <= tp1:
+                                    tp1_hit = True
+                                    trade["tp1_hit"] = True
+                                    trade["tp1_hit_candle"] = bar_num
+                                    trade["tp1_hit_price"] = tp1
+                                    
+                                    pnl_tp1_full = ((entry - tp1) / entry) * 100.0
+                                    r_tp1_full = (pnl_tp1_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                    trade["tp1_realized_pnl_pct"] = round(pnl_tp1_full * 0.5, 2)
+                                    trade["tp1_realized_r"] = round(r_tp1_full * 0.5, 2)
+                                    
+                                    trade["runner_active"] = True
+                                    trade["runner_sl"] = entry
+                                    runner_sl = entry
+
+                                    if trade.get("mt5_tickets"):
+                                        try:
+                                            from app.mt5_bridge import mt5_bridge
+                                            for tk in trade["mt5_tickets"]:
+                                                mt5_bridge.modify_position_sl(tk, new_sl=entry)
+                                        except Exception as e_mod:
+                                            logger.debug(f"Auto-breakeven MT5 adjust error: {e_mod}")
+
+                                    if low <= tp2:
+                                        pnl_tp2_full = ((entry - tp2) / entry) * 100.0
+                                        r_tp2_full = (pnl_tp2_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                        trade["runner_outcome"] = "TP2_HIT"
+                                        trade["runner_exit_price"] = tp2
+                                        trade["runner_realized_pnl_pct"] = round(pnl_tp2_full * 0.5, 2)
+                                        trade["runner_realized_r"] = round(r_tp2_full * 0.5, 2)
+
+                                        outcome = "WIN"
+                                        resolved_price = tp2
+                                        exit_reason = f"TP1 hit (50% banked) & TP2 reached at {tp2:.4f}"
+                                        hit_candle_idx = bar_num
+                                        exit_candle_unix = candle_ts
+                                        break
+                            else:
+                                if low <= tp2:
+                                    pnl_tp2_full = ((entry - tp2) / entry) * 100.0
+                                    r_tp2_full = (pnl_tp2_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                                    trade["runner_outcome"] = "TP2_HIT"
+                                    trade["runner_exit_price"] = tp2
+                                    trade["runner_realized_pnl_pct"] = round(pnl_tp2_full * 0.5, 2)
+                                    trade["runner_realized_r"] = round(r_tp2_full * 0.5, 2)
+
+                                    outcome = "WIN"
+                                    resolved_price = tp2
+                                    exit_reason = f"TP1 hit (50% banked) & TP2 reached at {tp2:.4f}"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
+                                elif high >= runner_sl:
+                                    trade["runner_outcome"] = "BREAKEVEN_HIT"
+                                    trade["runner_exit_price"] = entry
+                                    trade["runner_realized_pnl_pct"] = 0.0
+                                    trade["runner_realized_r"] = 0.0
+
+                                    outcome = "WIN"
+                                    resolved_price = entry
+                                    exit_reason = f"TP1 hit (50% banked at {tp1:.4f}), Runner stopped at Breakeven ({entry:.4f})"
+                                    hit_candle_idx = bar_num
+                                    exit_candle_unix = candle_ts
+                                    break
 
                 # If neither TP nor SL touched, check if max_candles have passed (Time Expiration)
                 max_candles = int(trade.get("max_candles", 5))
@@ -317,33 +485,51 @@ class OutcomeTracker:
                     hit_candle_idx = max_candles
                     exit_candle_unix = int(sub_df["unix"].iloc[idx_close])
 
-                    if direction == "BULLISH":
-                        pnl = last_close - entry
-                    else:
-                        pnl = entry - last_close
+                    if not split_mode or not tp1_hit:
+                        if direction == "BULLISH":
+                            pnl = last_close - entry
+                        else:
+                            pnl = entry - last_close
 
-                    if pnl > 0.0001:
-                        outcome = "EXPIRED_PROFIT"
-                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Profit at {last_close:.4f})"
-                    elif pnl < -0.0001:
-                        outcome = "EXPIRED_LOSS"
-                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Drawdown at {last_close:.4f})"
+                        if pnl > 0.0001:
+                            outcome = "EXPIRED_PROFIT"
+                            exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Profit at {last_close:.4f})"
+                        elif pnl < -0.0001:
+                            outcome = "EXPIRED_LOSS"
+                            exit_reason = f"{max_candles}-Candle Time Expiration (Closed in Drawdown at {last_close:.4f})"
+                        else:
+                            outcome = "EXPIRED_BREAKEVEN"
+                            exit_reason = f"{max_candles}-Candle Time Expiration (Closed at Breakeven at {last_close:.4f})"
                     else:
-                        outcome = "EXPIRED_BREAKEVEN"
-                        exit_reason = f"{max_candles}-Candle Time Expiration (Closed at Breakeven at {last_close:.4f})"
+                        # TP1 was banked (50%), Runner expired at Bar 5
+                        if direction == "BULLISH":
+                            pnl_runner_full = ((last_close - entry) / entry) * 100.0
+                        else:
+                            pnl_runner_full = ((entry - last_close) / entry) * 100.0
+
+                        r_runner_full = (pnl_runner_full / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                        trade["runner_outcome"] = "EXPIRED_BAR5"
+                        trade["runner_exit_price"] = last_close
+                        trade["runner_realized_pnl_pct"] = round(pnl_runner_full * 0.5, 2)
+                        trade["runner_realized_r"] = round(r_runner_full * 0.5, 2)
+
+                        outcome = "WIN"
+                        exit_reason = f"TP1 hit (50% banked at {tp1:.4f}), Runner expired at Bar 5 ({last_close:.4f})"
 
                 if outcome:
                     # Finalize resolved trade
                     closed_at_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                     now_closed_unix = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
                     
-                    # Calculate realized return % and R-multiple
-                    if direction == "BULLISH":
-                        realized_pnl_pct = ((resolved_price - entry) / entry) * 100.0
+                    if split_mode and trade.get("tp1_hit"):
+                        realized_pnl_pct = round(trade.get("tp1_realized_pnl_pct", 0.0) + trade.get("runner_realized_pnl_pct", 0.0), 2)
+                        r_multiple = round(trade.get("tp1_realized_r", 0.0) + trade.get("runner_realized_r", 0.0), 2)
                     else:
-                        realized_pnl_pct = ((entry - resolved_price) / entry) * 100.0
-
-                    r_multiple = (realized_pnl_pct / ((trade["sl_distance"] / entry) * 100.0)) if trade["sl_distance"] > 0 else 0.0
+                        if direction == "BULLISH":
+                            realized_pnl_pct = round(((resolved_price - entry) / entry) * 100.0, 2)
+                        else:
+                            realized_pnl_pct = round(((entry - resolved_price) / entry) * 100.0, 2)
+                        r_multiple = round((realized_pnl_pct / ((trade["sl_distance"] / entry) * 100.0)), 2) if trade["sl_distance"] > 0 else 0.0
 
                     trade["status"] = "CLOSED"
                     trade["outcome"] = outcome
@@ -353,8 +539,8 @@ class OutcomeTracker:
                     trade["exit_price"] = round(resolved_price, 4)
                     trade["exit_reason"] = exit_reason
                     trade["hit_on_candle"] = hit_candle_idx
-                    trade["realized_pnl_pct"] = round(realized_pnl_pct, 2)
-                    trade["realized_r"] = round(r_multiple, 2)
+                    trade["realized_pnl_pct"] = realized_pnl_pct
+                    trade["realized_r"] = r_multiple
 
                     # Auto-close associated MT5 positions upon lifespan expiration
                     if outcome.startswith("EXPIRED") and trade.get("mt5_tickets"):
@@ -411,6 +597,17 @@ class OutcomeTracker:
         win_rate = stats.get("win_rate_pct", 0.0)
         total_closed = stats.get("total_closed", 0)
 
+        split_details = ""
+        if trade.get("split_tp_mode") and trade.get("tp1_hit"):
+            tp1_r = trade.get("tp1_realized_r", 0.0)
+            runner_r = trade.get("runner_realized_r", 0.0)
+            runner_out = trade.get("runner_outcome", "RUNNER").replace("_", " ")
+            split_details = (
+                f"• <b>50/50 Scale-Out Breakdown:</b>\n"
+                f"  ▫️ <b>Tranche 1 (50% TP1):</b> Banked <code>+{tp1_r:.2f}R</code>\n"
+                f"  ▫️ <b>Tranche 2 (50% Runner):</b> {runner_out} <code>{runner_r:+.2f}R</code>\n"
+            )
+
         msg = (
             f"{header}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -420,6 +617,7 @@ class OutcomeTracker:
             f"📊 <b>Execution Summary:</b>\n"
             f"• <b>Entry:</b> <code>{trade['entry_price']}</code>\n"
             f"• <b>Exit:</b> <code>{trade['exit_price']}</code>\n"
+            f"{split_details}"
             f"• <b>Reason:</b> <i>{trade['exit_reason']}</i>\n"
             f"• <b>Duration:</b> {duration_str}\n"
             f"• <b>Initial Conviction:</b> <b>{trade['conviction']}%</b>\n"
@@ -627,7 +825,8 @@ class OutcomeTracker:
         writer.writerow([
             "ID", "Symbol", "Timeframe", "Direction", "Conviction (%)",
             "Entry Price", "Exit Price", "Stop Loss", "Take Profit 1", "Take Profit 2",
-            "Outcome", "Realized PnL (%)", "Realized R", "Duration (Bars)", "Max Candles",
+            "Outcome", "Realized PnL (%)", "Realized R", "TP1 Realized R", "Runner Realized R", "Runner Outcome",
+            "Duration (Bars)", "Max Candles",
             "Opened At (UTC)", "Closed At (UTC)", "Session", "Exit Reason", "Dual AI Confluence"
         ])
 
@@ -646,6 +845,9 @@ class OutcomeTracker:
                 t.get("outcome", ""),
                 t.get("realized_pnl_pct", ""),
                 t.get("realized_r", ""),
+                t.get("tp1_realized_r", ""),
+                t.get("runner_realized_r", ""),
+                t.get("runner_outcome", ""),
                 t.get("hit_on_candle", t.get("candles_monitored", "")),
                 t.get("max_candles", 5),
                 t.get("opened_at", ""),

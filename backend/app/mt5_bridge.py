@@ -823,6 +823,60 @@ class MT5Bridge:
             "retcode": result.retcode
         }
 
+    def modify_position_sl(self, ticket: int, new_sl: float, new_tp: Optional[float] = None) -> Dict[str, Any]:
+        """
+        Modifies the Stop Loss (and optionally Take Profit) of an open MT5 position.
+        Used to move Stop Loss to Breakeven when TP1 is hit in split 50/50 scale-out mode.
+        Uses MT5 TRADE_ACTION_SLTP.
+        """
+        if not MT5_AVAILABLE:
+            return {"success": False, "error": "MetaTrader 5 library not available"}
+        if not self.is_connected:
+            self.initialize()
+        if not self.is_connected:
+            return {"success": False, "error": "MT5 terminal not connected"}
+
+        positions = mt5.positions_get(ticket=ticket)
+        if not positions:
+            return {"success": False, "error": f"Position #{ticket} not found or already closed"}
+
+        pos = positions[0]
+        sym = pos.symbol
+        target_tp = float(new_tp) if new_tp is not None else float(pos.tp)
+
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": ticket,
+            "symbol": sym,
+            "sl": float(round(new_sl, 5)),
+            "tp": float(round(target_tp, 5)),
+        }
+
+        logger.info(f"Dispatching MT5 SL modification for #{ticket}: SL={request['sl']}, TP={request['tp']}")
+        result = mt5.order_send(request)
+
+        if result is None:
+            err = mt5.last_error()
+            return {"success": False, "error": f"order_send modify failed: {err}"}
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {
+                "success": False,
+                "retcode": result.retcode,
+                "error": f"Broker rejected SL modification: {result.comment} (Code {result.retcode})",
+                "comment": result.comment
+            }
+
+        logger.info(f"Position #{ticket} Stop-Loss updated to {new_sl} successfully!")
+        return {
+            "success": True,
+            "ticket": ticket,
+            "new_sl": new_sl,
+            "new_tp": target_tp,
+            "symbol": sym,
+            "retcode": result.retcode
+        }
+
 
 # Global MT5 bridge singleton
 mt5_bridge = MT5Bridge()

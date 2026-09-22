@@ -1667,7 +1667,15 @@ function renderOutcomesList() {
 
     if (tr.outcome === "WIN") {
       badgeClass = "sig-badge-win";
-      outcomeLabel = "WIN (TP1)";
+      if (tr.runner_outcome === "TP2_HIT") {
+        outcomeLabel = "WIN (TP1+TP2)";
+      } else if (tr.runner_outcome === "BREAKEVEN_HIT") {
+        outcomeLabel = "WIN (TP1+BE)";
+      } else if (tr.runner_outcome === "EXPIRED_BAR5") {
+        outcomeLabel = "WIN (TP1+Exp)";
+      } else {
+        outcomeLabel = "WIN";
+      }
     } else if (tr.outcome === "LOSS") {
       badgeClass = "sig-badge-loss";
       outcomeLabel = "LOSS (SL)";

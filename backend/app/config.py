@@ -29,7 +29,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "auto_trade_min_conviction": 80.0,
         "auto_trade_dual_ai_only": True,
         "default_dollar_risk": 50.0,
-        "split_tp_mode": False,
+        "split_tp_mode": True,
         "auto_close_on_expiry": True,
         "auto_trade_timeframes": ["1h", "4h"],
         "prop_firm_guardrails": {
