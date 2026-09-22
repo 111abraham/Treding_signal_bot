@@ -353,6 +353,10 @@ class OutcomeTracker:
                                         hit_candle_idx = bar_num
                                         exit_candle_unix = candle_ts
                                         break
+                                    else:
+                                        if notify_telegram and not trade.get("tp1_alert_sent"):
+                                            trade["tp1_alert_sent"] = True
+                                            await self._send_tp1_hit_telegram(trade)
                             else:
                                 # Stage 2: Runner active on subsequent candles
                                 if high >= tp2:
@@ -448,6 +452,10 @@ class OutcomeTracker:
                                         hit_candle_idx = bar_num
                                         exit_candle_unix = candle_ts
                                         break
+                                    else:
+                                        if notify_telegram and not trade.get("tp1_alert_sent"):
+                                            trade["tp1_alert_sent"] = True
+                                            await self._send_tp1_hit_telegram(trade)
                             else:
                                 if low <= tp2:
                                     pnl_tp2_full = ((entry - tp2) / entry) * 100.0
@@ -576,10 +584,48 @@ class OutcomeTracker:
 
         return resolved_this_cycle
 
+    async def _send_tp1_hit_telegram(self, trade: Dict[str, Any]):
+        """Dispatches an alert the moment TP1 is banked and the Runner Stop-Loss is moved to Breakeven."""
+        tp1_r = trade.get("tp1_realized_r", 0.0)
+        tp1_pnl = trade.get("tp1_realized_pnl_pct", 0.0)
+        entry = trade["entry_price"]
+        tp2 = trade.get("take_profit_2", trade["take_profit_1"])
+        dir_emoji = "🟢 BUY" if trade["direction"] == "BULLISH" else "🔴 SELL"
+
+        msg = (
+            "🛡️ <b>50/50 SCALE-OUT: TAKE-PROFIT 1 FILLED!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Asset:</b> {trade['name']} (<code>{trade['symbol']}</code>)\n"
+            f"<b>Timeframe:</b> {trade['timeframe']} | <b>Direction:</b> {dir_emoji}\n"
+            "<b>Status:</b> 🔒 <b>TRADE IS NOW 100% RISK-FREE</b>\n\n"
+            "💰 <b>Tranche 1 (50% Banked):</b>\n"
+            f"• <b>Profit Locked In:</b> <code>+{tp1_pnl:0.2f}% (+{tp1_r:0.2f}R)</code> at <code>{trade['take_profit_1']}</code>\n\n"
+            "🏃 <b>Tranche 2 (50% Runner Active):</b>\n"
+            f"• <b>Stop-Loss Moved:</b> <code>{trade['stop_loss']}</code> ➡️ <b>Breakeven</b> (<code>{entry}</code>)\n"
+            f"• <b>Target (TP2):</b> <code>{tp2}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "<i>The trade can no longer lose. Running to TP2 with zero downside risk.</i>"
+        )
+        try:
+            await telegram_notifier.send_message(msg)
+        except Exception as e:
+            logger.warning(f"Could not send TP1 Telegram alert: {e}")
+
     async def _send_resolution_telegram(self, trade: Dict[str, Any]):
         """Dispatches an outcome card to Telegram when a trade concludes."""
         outcome = trade["outcome"]
-        if outcome == "WIN":
+        runner_out = trade.get("runner_outcome")
+
+        if runner_out == "BREAKEVEN_HIT":
+            header = "🛡️ <b>TRADE RESOLUTION: TP1 BANKED + BREAKEVEN SECURED!</b>"
+            badge = "✅ <b>WIN (TP1 + BE)</b>"
+        elif runner_out == "TP2_HIT":
+            header = "🚀 <b>TRADE RESOLUTION: FULL SCALE-OUT WIN (TP1 + TP2)!</b>"
+            badge = "🎯 <b>BIG WIN (TP1 + TP2)</b>"
+        elif runner_out == "EXPIRED_BAR5":
+            header = "⏱️ <b>TRADE RESOLUTION: TP1 BANKED + RUNNER BAR 5 EXPIRY</b>"
+            badge = "✅ <b>WIN (TP1 + Exp)</b>"
+        elif outcome == "WIN":
             header = "🎯 <b>TRADE RESOLUTION: TAKE-PROFIT HIT!</b>"
             badge = "✅ <b>WIN</b>"
         elif outcome == "LOSS":
