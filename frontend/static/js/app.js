@@ -2493,40 +2493,128 @@ function setupEventListeners() {
     });
   }
 
+  // Detailed hover notes dictionary for individual option pills
+  const OPTION_NOTES = {
+    // Timeframes
+    "5m": { title: "5m (Micro-Scalp)", note: "Rapid momentum scalping. High trade frequency, quick turnaround, tighter Stop Loss. Highly sensitive to broker spread friction." },
+    "15m": { title: "15m (Scalp)", note: "Standard intraday scalping timeframe. Balanced trade discovery with noise filtering for short-horizon impulses." },
+    "1h": { title: "1h (Intraday)", note: "Recommended core intraday timeframe. High structural win rate, low spread friction, ideal for London and New York momentum." },
+    "4h": { title: "4h (Swing)", note: "High-conviction multi-day swing timeframe. Maximum structural edge, minimal noise, captures major institutional trend legs." },
+    "1d": { title: "1D (Daily)", note: "Macro daily timeframe. Captures high-magnitude multi-day institutional trend moves with large profit targets." },
+    // Sessions & Overlaps
+    "overlap": { title: "⚡ Overlap (London + NY)", note: "London & New York session overlap (13:00 - 16:00 UTC). Highest global liquidity, deepest order books, tightest spreads, and cleanest trend momentum." },
+    "london": { title: "🇬🇧 London Session", note: "European trading session (07:00 - 15:30 UTC). Major volatility expansion, frequent liquidity sweeps, and prime breakouts across European pairs." },
+    "new york": { title: "🇺🇸 New York Session", note: "North American session (12:00 - 20:30 UTC). High-impact economic news releases, US equity cash open momentum, and strong institutional follow-through." },
+    "asian": { title: "🌏 Asian Session", note: "Tokyo & Sydney session (23:00 - 07:00 UTC). Typically lower volatility and mean-reverting ranges; wider spreads on Western currency pairs." },
+    "off-hours": { title: "🌙 Off-Hours", note: "Twilight transition between NY close and Asian open (20:30 - 23:00 UTC). Very thin liquidity, wide broker spreads, and elevated slippage risk." },
+    // Asset Categories
+    "forex": { title: "💱 Forex", note: "Major and minor currency pairs (EURUSD, GBPUSD, USDJPY, AUDUSD). Tight broker spreads, high liquidity during London & New York sessions." },
+    "crypto": { title: "🪙 Crypto", note: "Digital assets (BTC, ETH, SOL). Operates 24/7/365 with high volatility and independent momentum cycles regardless of market session." },
+    "indices": { title: "📈 Indices", note: "Equity benchmarks (US100/Nasdaq, US500/S&P, US30/Dow, GER40/DAX). Prime directional momentum during New York and London cash opens." },
+    "commodities": { title: "🥇 Metals & Commodities", note: "Precious metals and energy (Gold/XAUUSD, Silver/XAGUSD, WTI). High ATR, rapid impulse waves, sensitive to US bond yields and macro CPI data." },
+    "stocks": { title: "🏢 Stocks", note: "Blue-chip equities (NVDA, AAPL, TSLA). Traded during official US stock exchange open hours (14:30 - 21:00 UTC)." }
+  };
+
+  function positionSettingsTooltip(elem) {
+    if (!floatingTooltip) return;
+    const rect = elem.getBoundingClientRect();
+    const tipWidth = 360;
+    let left = rect.right + 14;
+    if (left + tipWidth > window.innerWidth - 12) {
+      left = Math.max(10, rect.left - tipWidth - 14);
+    }
+    let top = Math.max(10, Math.min(window.innerHeight - 170, rect.top));
+    floatingTooltip.style.left = `${left}px`;
+    floatingTooltip.style.top = `${top}px`;
+  }
+
   const settingsFormElem = document.getElementById("settingsForm");
   if (settingsFormElem) {
     settingsFormElem.addEventListener("mouseover", (e) => {
       if (!modalDialog || !modalDialog.classList.contains("modal-hover-notes")) return;
-      const group = e.target.closest(".form-group, .tf-checkbox-grid");
-      if (!group) return;
 
-      const noteElem = group.querySelector(".setting-note") || (group.nextElementSibling && group.nextElementSibling.classList.contains("setting-note") ? group.nextElementSibling : null);
-      const noteText = noteElem ? noteElem.textContent.trim() : (group.dataset.note || "");
-      if (!noteText) return;
-
-      const label = group.querySelector("label");
-      const titleText = label ? label.textContent.replace(/[:*]/g, "").trim() : "Setting Info";
-
-      floatingTooltip.innerHTML = `<div class="tooltip-title">💡 ${titleText}</div><div>${noteText}</div>`;
-      floatingTooltip.classList.add("visible");
-
-      const rect = group.getBoundingClientRect();
-      const tipWidth = 310;
-      let left = rect.right + 12;
-      if (left + tipWidth > window.innerWidth - 10) {
-        left = Math.max(10, rect.left - tipWidth - 12);
+      // Case 1: Hovering over an individual checkbox pill (e.g. 5m, Overlap, Metals)
+      const pill = e.target.closest(".tf-check-label");
+      if (pill) {
+        const input = pill.querySelector("input");
+        const val = input ? (input.value || "").toLowerCase() : "";
+        const opt = OPTION_NOTES[val];
+        let titleText = pill.textContent.replace(/[:*]/g, "").trim();
+        let noteText = "";
+        if (opt) {
+          titleText = opt.title;
+          noteText = opt.note;
+        } else {
+          const parentGroup = pill.closest(".form-group");
+          const parentNote = parentGroup ? parentGroup.querySelector(".setting-note") : null;
+          noteText = parentNote ? parentNote.textContent.trim() : "";
+        }
+        if (noteText) {
+          floatingTooltip.innerHTML = `<div class="tooltip-title">💡 ${titleText}</div><div>${noteText}</div>`;
+          floatingTooltip.classList.add("visible");
+          positionSettingsTooltip(pill);
+          return;
+        }
       }
-      let top = Math.max(10, Math.min(window.innerHeight - 140, rect.top));
-      floatingTooltip.style.left = `${left}px`;
-      floatingTooltip.style.top = `${top}px`;
+
+      // Case 2: Hovering over a form subsection title (e.g. Automated Signal Execution Engine)
+      const subTitle = e.target.closest(".form-subsection-title");
+      if (subTitle) {
+        const noteElem = subTitle.querySelector(".setting-note");
+        const noteText = noteElem ? noteElem.textContent.trim() : (subTitle.dataset.note || "");
+        const rawTitle = subTitle.childNodes[0] ? subTitle.childNodes[0].textContent.trim() : subTitle.textContent.trim();
+        if (noteText) {
+          floatingTooltip.innerHTML = `<div class="tooltip-title">${rawTitle}</div><div>${noteText}</div>`;
+          floatingTooltip.classList.add("visible");
+          positionSettingsTooltip(subTitle);
+          return;
+        }
+      }
+
+      // Case 3: Hovering over a primary section title (e.g. MetaTrader 5 Execution & Risk Management)
+      const secTitle = e.target.closest(".section-title");
+      if (secTitle) {
+        const noteElem = secTitle.querySelector(".setting-note") || (secTitle.nextElementSibling && secTitle.nextElementSibling.classList.contains("setting-note") ? secTitle.nextElementSibling : null);
+        const noteText = noteElem ? noteElem.textContent.trim() : (secTitle.dataset.note || "");
+        const rawTitle = secTitle.childNodes[0] ? secTitle.childNodes[0].textContent.trim() : secTitle.textContent.trim();
+        if (noteText) {
+          floatingTooltip.innerHTML = `<div class="tooltip-title">${rawTitle}</div><div>${noteText}</div>`;
+          floatingTooltip.classList.add("visible");
+          positionSettingsTooltip(secTitle);
+          return;
+        }
+      }
+
+      // Case 4: Standard form group (individual setting row)
+      const group = e.target.closest(".form-group");
+      if (group) {
+        const noteElem = group.querySelector(".setting-note") || (group.nextElementSibling && group.nextElementSibling.classList.contains("setting-note") ? group.nextElementSibling : null);
+        const noteText = noteElem ? noteElem.textContent.trim() : (group.dataset.note || "");
+        if (!noteText) return;
+
+        const label = group.querySelector("label");
+        const titleText = label ? label.textContent.replace(/[:*]/g, "").trim() : "Setting Info";
+
+        floatingTooltip.innerHTML = `<div class="tooltip-title">💡 ${titleText}</div><div>${noteText}</div>`;
+        floatingTooltip.classList.add("visible");
+        positionSettingsTooltip(group);
+        return;
+      }
     });
 
     settingsFormElem.addEventListener("mouseout", (e) => {
-      const group = e.target.closest(".form-group, .tf-checkbox-grid");
-      if (!group || !e.relatedTarget || !group.contains(e.relatedTarget)) {
+      const activeElem = e.target.closest(".form-group, .form-subsection-title, .section-title, .tf-check-label");
+      if (!activeElem || !e.relatedTarget || !activeElem.contains(e.relatedTarget)) {
         if (floatingTooltip) floatingTooltip.classList.remove("visible");
       }
     });
+
+    const modalBodyElem = document.querySelector("#settingsModal .modal-body");
+    if (modalBodyElem) {
+      modalBodyElem.addEventListener("scroll", () => {
+        if (floatingTooltip) floatingTooltip.classList.remove("visible");
+      }, { passive: true });
+    }
   }
 
   // 1-Click MT5 Execution: Risk quick pills ($25, $50, $100, $250)

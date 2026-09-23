@@ -1438,6 +1438,24 @@ body.col-resizing * {
   font-family: var(--font-mono);
 }
 
+.form-subsection-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin: 14px 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+  padding: 4px 6px;
+  display: block;
+  font-family: var(--font-mono);
+}
+
+.form-subsection-title.subgroup-green {
+  color: var(--accent-green);
+  border-bottom-color: rgba(16, 185, 129, 0.2);
+}
+
 .form-group {
   margin-bottom: 14px;
   display: flex;
@@ -1556,27 +1574,41 @@ body.col-resizing * {
   padding-bottom: 10px;
 }
 
+.modal-hover-notes .form-group,
+.modal-hover-notes .form-subsection-title,
+.modal-hover-notes .section-title,
+.modal-hover-notes .tf-check-label {
+  cursor: help;
+  transition: all 0.15s ease;
+}
+
 .modal-hover-notes .form-group {
   margin-bottom: 10px;
   position: relative;
-  cursor: help;
-  transition: background-color 0.15s ease;
   border-radius: 4px;
   padding: 2px 4px;
 }
 
-.modal-hover-notes .form-group:hover {
-  background-color: rgba(0, 242, 254, 0.04);
+.modal-hover-notes .form-group:hover,
+.modal-hover-notes .form-subsection-title:hover,
+.modal-hover-notes .section-title:hover {
+  background-color: rgba(0, 242, 254, 0.05);
+  border-radius: 4px;
+}
+
+.modal-hover-notes .tf-check-label:hover {
+  background-color: rgba(0, 242, 254, 0.12);
+  border-color: rgba(0, 242, 254, 0.4);
 }
 
 /* FLOATING SETTINGS TOOLTIP */
 #settingsFloatingTooltip {
   position: fixed;
   z-index: 100000;
-  max-width: 320px;
-  background: rgba(13, 20, 36, 0.97);
+  max-width: 360px;
+  background: rgba(13, 20, 36, 0.98);
   border: 1px solid var(--accent-cyan);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 14px rgba(0, 242, 254, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 242, 254, 0.3);
   border-radius: 6px;
   padding: 9px 13px;
   font-size: 11px;
