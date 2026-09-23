@@ -60,6 +60,18 @@ class ScanEngine:
         strat_cfg = cfg.get("strategy", {})
         timesfm_cfg = cfg.get("timesfm", {})
 
+        scan_cats = strat_cfg.get("scan_categories")
+        if scan_cats and len(scan_cats) > 0:
+            scan_cats_lower = [c.lower() for c in scan_cats]
+            def _cat_allowed(c: str) -> bool:
+                c_low = c.lower()
+                if c_low in scan_cats_lower:
+                    return True
+                if c_low in ("commodities", "metals") and ("commodities" in scan_cats_lower or "metals" in scan_cats_lower):
+                    return True
+                return False
+            active_assets = [item for item in active_assets if _cat_allowed(item.get("category", ""))]
+
         # Sync telegram credentials
         telegram_notifier.update_credentials(
             telegram_cfg.get("bot_token", ""),
@@ -128,7 +140,26 @@ class ScanEngine:
                                     auto_trade_tfs = [t.lower() for t in strat_cfg.get("auto_trade_timeframes", ["1h", "4h"])]
                                     tf_allowed = (tf or "1h").lower() in auto_trade_tfs
 
-                                    if auto_trade_enabled and tf_allowed and signal.get("conviction", 0) >= auto_trade_min_conv:
+                                    auto_trade_sessions = [s.lower() for s in strat_cfg.get("auto_trade_sessions", ["overlap", "london", "new york"])]
+                                    curr_session = (signal.get("session_name") or "").lower()
+                                    session_allowed = True
+                                    if auto_trade_sessions:
+                                        session_allowed = any(
+                                            (s == "overlap" and "overlap" in curr_session) or
+                                            (s == "london" and "london" in curr_session and "overlap" not in curr_session) or
+                                            (s in ("ny", "new york") and ("new york" in curr_session or "ny" in curr_session) and "overlap" not in curr_session) or
+                                            (s == "asian" and "asian" in curr_session) or
+                                            (s in ("off-hours", "offhours") and ("off-hours" in curr_session or "rollover" in curr_session))
+                                            for s in auto_trade_sessions
+                                        )
+
+                                    auto_trade_cats = [c.lower() for c in strat_cfg.get("auto_trade_categories", [])]
+                                    cat_allowed = True
+                                    if auto_trade_cats:
+                                        asset_cat = (asset.get("category") or "").lower()
+                                        cat_allowed = asset_cat in auto_trade_cats or (asset_cat in ("commodities", "metals") and ("commodities" in auto_trade_cats or "metals" in auto_trade_cats))
+
+                                    if auto_trade_enabled and tf_allowed and session_allowed and cat_allowed and signal.get("conviction", 0) >= auto_trade_min_conv:
                                         dual_ai_ok = True
                                         if auto_trade_dual_ai_only:
                                             dual_ai_ok = (signal.get("timesfm_status") == "ready" and signal.get("timesfm_consensus") == "AGREEMENT")

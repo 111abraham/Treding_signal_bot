@@ -40,46 +40,61 @@ function getSelectedTfsDisplay() {
   return Array.from(selectedTfs).map((t) => (t.toUpperCase() === "1D" ? "1D" : t)).join(" + ");
 }
 
-let selectedSession = "ALL";
-let selectedCategory = "ALL";
+let selectedSessions = new Set(["ALL"]);
+let selectedCategories = new Set(["ALL"]);
 let symbolSearchFilter = "";
 
 function isSessionSelected(sessionName) {
-  if (!selectedSession || selectedSession === "ALL") return true;
+  if (!selectedSessions || selectedSessions.has("ALL") || selectedSessions.size === 0) return true;
   if (!sessionName) return false;
   const s = String(sessionName).toLowerCase();
-  const tgt = selectedSession.toLowerCase();
-  if (tgt === "london") {
-    return s.includes("london") && !s.includes("overlap");
-  } else if (tgt === "overlap") {
-    return s.includes("overlap");
-  } else if (tgt === "ny" || tgt === "new york") {
-    return (s.includes("new york") || s.includes("ny")) && !s.includes("overlap");
-  } else if (tgt === "asian") {
-    return s.includes("asian");
-  } else if (tgt === "off-hours" || tgt === "offhours") {
-    return s.includes("off-hours") || s.includes("rollover");
+  for (const sess of selectedSessions) {
+    const tgt = sess.toLowerCase();
+    if (tgt === "london" && s.includes("london") && !s.includes("overlap")) return true;
+    if (tgt === "overlap" && s.includes("overlap")) return true;
+    if ((tgt === "ny" || tgt === "new york") && (s.includes("new york") || s.includes("ny")) && !s.includes("overlap")) return true;
+    if (tgt === "asian" && s.includes("asian")) return true;
+    if ((tgt === "off-hours" || tgt === "offhours") && (s.includes("off-hours") || s.includes("rollover"))) return true;
+    if (s.includes(tgt)) return true;
   }
-  return s.includes(tgt);
+  return false;
+}
+
+function getSelectedSessionsString() {
+  if (!selectedSessions || selectedSessions.has("ALL") || selectedSessions.size === 0) return "ALL";
+  return Array.from(selectedSessions).join(",");
+}
+
+function getSelectedSessionsDisplay() {
+  if (!selectedSessions || selectedSessions.has("ALL") || selectedSessions.size === 0) return "ALL";
+  return Array.from(selectedSessions).join(" + ");
 }
 
 function isCategorySelected(category, symbol) {
-  if (selectedCategory && selectedCategory !== "ALL") {
-    if (!category) return false;
-    const cat = String(category).toLowerCase();
-    const tgt = selectedCategory.toLowerCase();
-    if (tgt === "commodities" || tgt === "metals") {
-      if (cat !== "commodities" && cat !== "metals") return false;
-    } else if (cat !== tgt) {
-      return false;
-    }
-  }
   if (symbolSearchFilter) {
     if (!symbol || !String(symbol).toLowerCase().includes(symbolSearchFilter.toLowerCase())) {
       return false;
     }
   }
-  return true;
+  if (!selectedCategories || selectedCategories.has("ALL") || selectedCategories.size === 0) return true;
+  if (!category) return false;
+  const cat = String(category).toLowerCase();
+  for (const c of selectedCategories) {
+    const tgt = c.toLowerCase();
+    if ((tgt === "commodities" || tgt === "metals") && (cat === "commodities" || cat === "metals")) return true;
+    if (cat === tgt) return true;
+  }
+  return false;
+}
+
+function getSelectedCategoriesString() {
+  if (!selectedCategories || selectedCategories.has("ALL") || selectedCategories.size === 0) return "ALL";
+  return Array.from(selectedCategories).join(",");
+}
+
+function getSelectedCategoriesDisplay() {
+  if (!selectedCategories || selectedCategories.has("ALL") || selectedCategories.size === 0) return "ALL";
+  return Array.from(selectedCategories).join(" + ");
 }
 
 let showChartTradeMarkers = true;
@@ -1471,10 +1486,10 @@ function renderSignalsList() {
     ? sorted
     : sorted.filter((s) => isTfSelected(s.timeframe));
 
-  if (selectedSession !== "ALL") {
+  if (!selectedSessions.has("ALL")) {
     filtered = filtered.filter((s) => isSessionSelected(s.session_name || s.session));
   }
-  if (selectedCategory !== "ALL" || symbolSearchFilter) {
+  if (!selectedCategories.has("ALL") || symbolSearchFilter) {
     filtered = filtered.filter((s) => isCategorySelected(s.category, s.symbol));
   }
   if (perfDualAiOnly && perfDualAiOnly.checked) {
@@ -1484,7 +1499,13 @@ function renderSignalsList() {
   signalCountBadge.textContent = filtered.length;
 
   if (filtered.length === 0) {
-    signalHistoryList.innerHTML = `<div class="empty-history">No ${getSelectedTfsDisplay()} signals recorded yet.</div>`;
+    let filterDesc = [];
+    if (!selectedTfs.has("ALL")) filterDesc.push(getSelectedTfsDisplay());
+    if (!selectedSessions.has("ALL")) filterDesc.push(getSelectedSessionsDisplay());
+    if (!selectedCategories.has("ALL")) filterDesc.push(getSelectedCategoriesDisplay());
+    if (symbolSearchFilter) filterDesc.push(`"${symbolSearchFilter}"`);
+    const descText = filterDesc.length > 0 ? ` (${filterDesc.join(" | ")})` : "";
+    signalHistoryList.innerHTML = `<div class="empty-history">No signals recorded${descText} yet.</div>`;
     return;
   }
 
@@ -1592,11 +1613,11 @@ function updatePerformanceDisplay() {
     filtered = filtered.filter((t) => isTfSelected(t.timeframe));
     activeFiltered = activeFiltered.filter((t) => isTfSelected(t.timeframe));
   }
-  if (selectedSession !== "ALL") {
+  if (!selectedSessions.has("ALL")) {
     filtered = filtered.filter((t) => isSessionSelected(t.session_name || t.session));
     activeFiltered = activeFiltered.filter((t) => isSessionSelected(t.session_name || t.session));
   }
-  if (selectedCategory !== "ALL" || symbolSearchFilter) {
+  if (!selectedCategories.has("ALL") || symbolSearchFilter) {
     filtered = filtered.filter((t) => isCategorySelected(t.category, t.symbol));
     activeFiltered = activeFiltered.filter((t) => isCategorySelected(t.category, t.symbol));
   }
@@ -1710,7 +1731,13 @@ function renderOutcomesList() {
   }
 
   if (list.length === 0) {
-    resolvedTradesList.innerHTML = `<div class="empty-history">No ${!selectedTfs.has("ALL") ? getSelectedTfsDisplay() : ""} closed trades found.</div>`;
+    let filterDesc = [];
+    if (!selectedTfs.has("ALL")) filterDesc.push(getSelectedTfsDisplay());
+    if (!selectedSessions.has("ALL")) filterDesc.push(getSelectedSessionsDisplay());
+    if (!selectedCategories.has("ALL")) filterDesc.push(getSelectedCategoriesDisplay());
+    if (symbolSearchFilter) filterDesc.push(`"${symbolSearchFilter}"`);
+    const descText = filterDesc.length > 0 ? ` (${filterDesc.join(" | ")})` : "";
+    resolvedTradesList.innerHTML = `<div class="empty-history">No closed trades found${descText}.</div>`;
     return;
   }
 
@@ -1992,9 +2019,10 @@ function setupEventListeners() {
       const tfParam = tf && tf.toUpperCase() !== "ALL" ? `&timeframe=${encodeURIComponent(tf)}` : "";
       const isDualAi = perfDualAiOnly && perfDualAiOnly.checked;
       const dualParam = isDualAi ? "&dual_ai_only=true" : "";
-      const convParam = currentMinConviction && currentMinConviction > 0 ? `&min_conviction=${currentMinConviction}` : "";
-      const sessParam = selectedSession && selectedSession !== "ALL" ? `&session=${encodeURIComponent(selectedSession)}` : "";
-      const catParam = selectedCategory && selectedCategory !== "ALL" ? `&category=${encodeURIComponent(selectedCategory)}` : "";
+      const sessStr = getSelectedSessionsString();
+      const catStr = getSelectedCategoriesString();
+      const sessParam = sessStr !== "ALL" ? `&session=${encodeURIComponent(sessStr)}` : "";
+      const catParam = catStr !== "ALL" ? `&category=${encodeURIComponent(catStr)}` : "";
       const symParam = symbolSearchFilter ? `&symbol=${encodeURIComponent(symbolSearchFilter)}` : "";
       const res = await fetch(`/api/performance/export?format=${format}${tfParam}${dualParam}${convParam}${sessParam}${catParam}${symParam}`);
       if (!res.ok) throw new Error("Failed to export history");
@@ -2004,8 +2032,8 @@ function setupEventListeners() {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const ext = format === "csv" ? "csv" : "json";
       const tfSuffix = tf && tf.toUpperCase() !== "ALL" ? `_${tf}` : "";
-      const sessSuffix = selectedSession && selectedSession !== "ALL" ? `_${selectedSession}` : "";
-      const catSuffix = selectedCategory && selectedCategory !== "ALL" ? `_${selectedCategory}` : "";
+      const sessSuffix = sessStr !== "ALL" ? `_${sessStr.replace(/,/g, "+")}` : "";
+      const catSuffix = catStr !== "ALL" ? `_${catStr.replace(/,/g, "+")}` : "";
       const dualSuffix = isDualAi ? "_dual_ai" : "";
       a.href = url;
       a.download = `trade_history${tfSuffix}${sessSuffix}${catSuffix}${dualSuffix}_${ts}.${ext}`;
@@ -2268,24 +2296,96 @@ function setupEventListeners() {
     });
   }
 
-  // Session & Overlap Filter Tabs
+  // Session & Overlap Filter Tabs with Shift / Ctrl multi-select
+  const ALL_SESSIONS = ["overlap", "london", "ny", "asian", "off-hours"];
   document.querySelectorAll(".sig-session-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".sig-session-tab").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      selectedSession = btn.dataset.session || "ALL";
+    btn.addEventListener("click", (e) => {
+      const sess = (btn.dataset.session || "ALL").toLowerCase();
+      const isMultiKey = e.shiftKey || e.ctrlKey || e.metaKey;
+
+      if (sess === "all") {
+        selectedSessions = new Set(["ALL"]);
+      } else if (isMultiKey) {
+        if (selectedSessions.has("ALL")) {
+          selectedSessions.clear();
+        }
+        if (selectedSessions.has(sess)) {
+          selectedSessions.delete(sess);
+          if (selectedSessions.size === 0) {
+            selectedSessions.add("ALL");
+          }
+        } else {
+          selectedSessions.add(sess);
+        }
+      } else {
+        if (selectedSessions.size > 1 && selectedSessions.has(sess)) {
+          selectedSessions.delete(sess);
+        } else {
+          selectedSessions = new Set([sess]);
+        }
+      }
+
+      if (ALL_SESSIONS.every((s) => selectedSessions.has(s))) {
+        selectedSessions = new Set(["ALL"]);
+      }
+
+      document.querySelectorAll(".sig-session-tab").forEach((b) => {
+        const bSess = (b.dataset.session || "ALL").toLowerCase();
+        if (selectedSessions.has("ALL")) {
+          b.classList.toggle("active", bSess === "all");
+        } else {
+          b.classList.toggle("active", selectedSessions.has(bSess));
+        }
+      });
+
       renderSignalsList();
       renderOutcomesList();
       updatePerformanceDisplay();
     });
   });
 
-  // Asset Category Filter Tabs
+  // Asset Category Filter Tabs with Shift / Ctrl multi-select
+  const ALL_CATS = ["forex", "crypto", "indices", "commodities", "stocks"];
   document.querySelectorAll(".sig-asset-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".sig-asset-tab").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      selectedCategory = btn.dataset.category || "ALL";
+    btn.addEventListener("click", (e) => {
+      const cat = (btn.dataset.category || "ALL").toLowerCase();
+      const isMultiKey = e.shiftKey || e.ctrlKey || e.metaKey;
+
+      if (cat === "all") {
+        selectedCategories = new Set(["ALL"]);
+      } else if (isMultiKey) {
+        if (selectedCategories.has("ALL")) {
+          selectedCategories.clear();
+        }
+        if (selectedCategories.has(cat)) {
+          selectedCategories.delete(cat);
+          if (selectedCategories.size === 0) {
+            selectedCategories.add("ALL");
+          }
+        } else {
+          selectedCategories.add(cat);
+        }
+      } else {
+        if (selectedCategories.size > 1 && selectedCategories.has(cat)) {
+          selectedCategories.delete(cat);
+        } else {
+          selectedCategories = new Set([cat]);
+        }
+      }
+
+      if (ALL_CATS.every((c) => selectedCategories.has(c))) {
+        selectedCategories = new Set(["ALL"]);
+      }
+
+      document.querySelectorAll(".sig-asset-tab").forEach((b) => {
+        const bCat = (b.dataset.category || "ALL").toLowerCase();
+        if (selectedCategories.has("ALL")) {
+          b.classList.toggle("active", bCat === "all");
+        } else {
+          b.classList.toggle("active", selectedCategories.has(bCat));
+        }
+      });
+
       renderSignalsList();
       renderOutcomesList();
       updatePerformanceDisplay();
@@ -2328,14 +2428,14 @@ function setupEventListeners() {
         b.classList.toggle("active", b.dataset.tf === "ALL");
       });
 
-      selectedSession = "ALL";
+      selectedSessions = new Set(["ALL"]);
       document.querySelectorAll(".sig-session-tab").forEach((b) => {
-        b.classList.toggle("active", b.dataset.session === "ALL");
+        b.classList.toggle("active", (b.dataset.session || "").toUpperCase() === "ALL");
       });
 
-      selectedCategory = "ALL";
+      selectedCategories = new Set(["ALL"]);
       document.querySelectorAll(".sig-asset-tab").forEach((b) => {
-        b.classList.toggle("active", b.dataset.category === "ALL");
+        b.classList.toggle("active", (b.dataset.category || "").toUpperCase() === "ALL");
       });
 
       if (symbolSearchInput) symbolSearchInput.value = "";
@@ -2554,6 +2654,18 @@ function setupEventListeners() {
         cb.checked = savedTfs.includes(cb.value);
       });
 
+      // Populate scan categories checkboxes
+      const savedScanCats = (cfg.strategy?.scan_categories || ["Forex", "Crypto", "Indices", "Commodities", "Stocks"]).map((c) => c.toLowerCase());
+      document.querySelectorAll(".scan-cat-check").forEach((cb) => {
+        cb.checked = savedScanCats.includes(cb.value.toLowerCase());
+      });
+
+      // Populate scan sessions checkboxes
+      const savedScanSessions = (cfg.strategy?.scan_sessions || ["overlap", "london", "new york", "asian", "off-hours"]).map((s) => s.toLowerCase());
+      document.querySelectorAll(".scan-session-check").forEach((cb) => {
+        cb.checked = savedScanSessions.includes(cb.value.toLowerCase());
+      });
+
       // Populate TimesFM controls
       const tfm = cfg.timesfm || {};
       const elTfmEnabled = document.getElementById("timesfmEnabled");
@@ -2600,6 +2712,18 @@ function setupEventListeners() {
       document.querySelectorAll(".auto-trade-tf-check").forEach((cb) => {
         cb.checked = savedAutoTfs.includes(cb.value);
       });
+
+      // Populate auto-execution session checkboxes
+      const savedAutoSessions = (strat.auto_trade_sessions || ["overlap", "london", "new york"]).map((s) => s.toLowerCase());
+      document.querySelectorAll(".auto-trade-session-check").forEach((cb) => {
+        cb.checked = savedAutoSessions.includes(cb.value.toLowerCase());
+      });
+
+      // Populate auto-execution category checkboxes
+      const savedAutoCats = (strat.auto_trade_categories || ["Forex", "Crypto", "Indices", "Commodities", "Stocks"]).map((c) => c.toLowerCase());
+      document.querySelectorAll(".auto-trade-cat-check").forEach((cb) => {
+        cb.checked = savedAutoCats.includes(cb.value.toLowerCase());
+      });
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -2621,9 +2745,14 @@ function setupEventListeners() {
       enabled: document.getElementById("tgEnabled").checked,
     };
 
-    // Collect selected multi-timeframe targets
+    // Collect selected multi-timeframe, session, and category targets
     const selectedTfs = Array.from(document.querySelectorAll(".scan-tf-check:checked")).map((cb) => cb.value);
+    const selectedScanCats = Array.from(document.querySelectorAll(".scan-cat-check:checked")).map((cb) => cb.value);
+    const selectedScanSessions = Array.from(document.querySelectorAll(".scan-session-check:checked")).map((cb) => cb.value);
+
     const selectedAutoTfs = Array.from(document.querySelectorAll(".auto-trade-tf-check:checked")).map((cb) => cb.value);
+    const selectedAutoSessions = Array.from(document.querySelectorAll(".auto-trade-session-check:checked")).map((cb) => cb.value);
+    const selectedAutoCats = Array.from(document.querySelectorAll(".auto-trade-cat-check:checked")).map((cb) => cb.value);
 
     const stratData = {
       max_spread_to_sl_ratio: parseFloat(document.getElementById("maxSpreadRatio").value),
@@ -2633,6 +2762,8 @@ function setupEventListeners() {
       filter_low_liquidity_sessions: document.getElementById("filterLowLiquiditySessions")?.checked !== false,
       require_london_ny_overlap: document.getElementById("requireLondonNyOverlap")?.checked === true,
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
+      scan_categories: selectedScanCats.length > 0 ? selectedScanCats : ["Forex", "Crypto", "Indices", "Commodities", "Stocks"],
+      scan_sessions: selectedScanSessions.length > 0 ? selectedScanSessions : ["overlap", "london", "new york", "asian", "off-hours"],
       forecast_candles: parseInt(document.getElementById("forecastCandles").value) || 5,
       show_countdown_timers: document.getElementById("showCountdownTimers").checked,
       show_chart_trade_markers: document.getElementById("showChartTradeMarkers")?.checked !== false,
@@ -2643,6 +2774,8 @@ function setupEventListeners() {
       auto_trade_min_conviction: parseFloat(document.getElementById("autoTradeMinConviction")?.value || 80),
       auto_trade_dual_ai_only: document.getElementById("autoTradeDualAiOnly")?.checked !== false,
       auto_trade_timeframes: selectedAutoTfs.length > 0 ? selectedAutoTfs : ["1h", "4h"],
+      auto_trade_sessions: selectedAutoSessions.length > 0 ? selectedAutoSessions : ["overlap", "london", "new york"],
+      auto_trade_categories: selectedAutoCats.length > 0 ? selectedAutoCats : ["Forex", "Crypto", "Indices", "Commodities", "Stocks"],
       default_dollar_risk: parseFloat(document.getElementById("defaultDollarRisk")?.value || 50),
       split_tp_mode: document.getElementById("tpExecutionMode")?.value === "split",
       auto_close_on_expiry: document.getElementById("autoCloseOnExpiry")?.checked !== false,

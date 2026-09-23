@@ -160,6 +160,21 @@ class SignalGenerator:
             if is_asian or "Off-Hours" in active_sess:
                 passes_session_filter = False
 
+        scan_sessions = [s.lower() for s in strategy_config.get("scan_sessions", [])]
+        if scan_sessions and len(scan_sessions) < 5 and category != "Crypto":
+            active_sess_str = (session_info.get("active_session") or "").lower()
+            is_asian = session_info.get("is_asian", False)
+            sess_matched = any(
+                (s == "overlap" and is_overlap) or
+                (s == "london" and "london" in active_sess_str and not is_overlap) or
+                (s in ("ny", "new york") and ("new york" in active_sess_str or "ny" in active_sess_str) and not is_overlap) or
+                (s == "asian" and is_asian) or
+                (s in ("off-hours", "offhours") and ("off-hours" in active_sess_str or is_rollover))
+                for s in scan_sessions
+            )
+            if not sess_matched:
+                passes_session_filter = False
+
         is_actionable = (
             passes_spread_filter and
             passes_session_filter and

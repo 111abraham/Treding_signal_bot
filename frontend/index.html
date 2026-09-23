@@ -422,28 +422,28 @@
             </div>
 
             <!-- 2. SESSION & OVERLAP FILTER BAR -->
-            <div class="sig-tf-filter-bar" id="signalsSessionFilterBar">
-              <span class="tf-filter-label" title="Filter performance and signals by trading session">Session:</span>
+            <div class="sig-tf-filter-bar" id="signalsSessionFilterBar" title="Shift+Click or Ctrl+Click to select multiple sessions (e.g. London + Overlap)">
+              <span class="tf-filter-label" title="Shift+Click or Ctrl+Click to select multiple">Session:</span>
               <div class="sig-session-tabs">
-                <button class="sig-session-tab active" data-session="ALL" title="All market sessions">ALL</button>
-                <button class="sig-session-tab" data-session="overlap" title="London-NY Overlap (13:00-16:30 UTC - Prime Institutional Liquidity)">⚡ Overlap</button>
-                <button class="sig-session-tab" data-session="london" title="London European Session (08:00-16:30 UTC)">🇬🇧 London</button>
-                <button class="sig-session-tab" data-session="ny" title="New York US Session (13:00-21:00 UTC)">🇺🇸 New York</button>
-                <button class="sig-session-tab" data-session="asian" title="Asian Pacific Session (00:00-09:00 UTC)">🌏 Asian</button>
-                <button class="sig-session-tab" data-session="off-hours" title="Off-Hours & Daily Rollover Window">🌙 Off-Hours</button>
+                <button class="sig-session-tab active" data-session="ALL" title="Show all market sessions">ALL</button>
+                <button class="sig-session-tab" data-session="overlap" title="London-NY Overlap (13:00-16:30 UTC - Shift+Click to combine)">⚡ Overlap</button>
+                <button class="sig-session-tab" data-session="london" title="London European Session (08:00-16:30 UTC - Shift+Click to combine)">🇬🇧 London</button>
+                <button class="sig-session-tab" data-session="ny" title="New York US Session (13:00-21:00 UTC - Shift+Click to combine)">🇺🇸 New York</button>
+                <button class="sig-session-tab" data-session="asian" title="Asian Pacific Session (00:00-09:00 UTC - Shift+Click to combine)">🌏 Asian</button>
+                <button class="sig-session-tab" data-session="off-hours" title="Off-Hours & Daily Rollover Window (Shift+Click to combine)">🌙 Off-Hours</button>
               </div>
             </div>
 
             <!-- 3. ASSET CATEGORY & SYMBOL SEARCH BAR -->
-            <div class="sig-tf-filter-bar" id="signalsAssetFilterBar">
-              <span class="tf-filter-label" title="Filter performance and signals by asset class">Asset:</span>
+            <div class="sig-tf-filter-bar" id="signalsAssetFilterBar" title="Shift+Click or Ctrl+Click to select multiple categories (e.g. Forex + Metals)">
+              <span class="tf-filter-label" title="Shift+Click or Ctrl+Click to select multiple">Asset:</span>
               <div class="sig-asset-tabs">
-                <button class="sig-asset-tab active" data-category="ALL">ALL</button>
-                <button class="sig-asset-tab" data-category="Forex" title="Currency Pairs">Forex</button>
-                <button class="sig-asset-tab" data-category="Crypto" title="24/7 Digital Assets (BTC, ETH)">Crypto</button>
-                <button class="sig-asset-tab" data-category="Indices" title="Stock Indices (NDX100, SPX500, US30, GER40)">Indices</button>
-                <button class="sig-asset-tab" data-category="Commodities" title="Metals & Energy (Gold, Silver, Oil)">Metals</button>
-                <button class="sig-asset-tab" data-category="Stocks" title="Equities CFD (AAPL, NVDA, TSLA)">Stocks</button>
+                <button class="sig-asset-tab active" data-category="ALL" title="Show all asset categories">ALL</button>
+                <button class="sig-asset-tab" data-category="Forex" title="Currency Pairs (Shift+Click to combine)">Forex</button>
+                <button class="sig-asset-tab" data-category="Crypto" title="24/7 Digital Assets (BTC, ETH - Shift+Click to combine)">Crypto</button>
+                <button class="sig-asset-tab" data-category="Indices" title="Stock Indices (Shift+Click to combine)">Indices</button>
+                <button class="sig-asset-tab" data-category="Commodities" title="Metals & Energy (Gold, Silver - Shift+Click to combine)">Metals</button>
+                <button class="sig-asset-tab" data-category="Stocks" title="Equities CFD (AAPL, NVDA, TSLA - Shift+Click to combine)">Stocks</button>
                 <div class="symbol-search-wrap">
                   <input type="text" id="symbolSearchInput" placeholder="🔍 Symbol..." title="Filter by ticker symbol (e.g. BTC, NDX, EUR)" />
                   <button type="button" class="btn-clear-search" id="btnClearSymbolSearch" style="display:none;" title="Clear search">&times;</button>
@@ -534,6 +534,28 @@
                 <small class="setting-note">Timeframes scanned by the background engine. Higher timeframes (1h, 4h) produce significantly higher win rates and lower spread drag.</small>
               </div>
               <div class="form-group">
+                <label>Target Asset Categories to Scan</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="scan-cat-check" value="Forex" checked /> 💱 Forex</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-cat-check" value="Crypto" checked /> 🪙 Crypto</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-cat-check" value="Indices" checked /> 📈 Indices</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-cat-check" value="Commodities" checked /> 🥇 Metals</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-cat-check" value="Stocks" checked /> 🏢 Stocks</label>
+                </div>
+                <small class="setting-note">Asset classes scanned by the AI engine. Unchecked asset classes will be skipped during background scanning cycles.</small>
+              </div>
+              <div class="form-group">
+                <label>Target Trading Sessions &amp; Overlaps</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="scan-session-check" value="overlap" checked /> ⚡ Overlap</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-session-check" value="london" checked /> 🇬🇧 London</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-session-check" value="new york" checked /> 🇺🇸 New York</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-session-check" value="asian" checked /> 🌏 Asian</label>
+                  <label class="tf-check-label"><input type="checkbox" class="scan-session-check" value="off-hours" checked /> 🌙 Off-Hours</label>
+                </div>
+                <small class="setting-note">Market sessions during which the scanner is allowed to generate active setups. Suppresses setups during unchecked sessions.</small>
+              </div>
+              <div class="form-group">
                 <label for="forecastCandles">Forecast Horizon / Signal Lifespan (Candles)</label>
                 <input type="number" id="forecastCandles" min="1" max="20" value="5" />
                 <small class="setting-note">Number of future candles monitored for TP/SL before expiration (Default: 5). Cleanly adjust as you experiment.</small>
@@ -621,6 +643,30 @@
                   <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="1d" /> 1D (Daily)</label>
                 </div>
                 <small class="setting-note">Select which timeframes are permitted to automatically place trades on MT5.</small>
+              </div>
+
+              <div class="form-group">
+                <label>Allowed Auto-Execution Sessions &amp; Overlaps</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-session-check" value="overlap" checked /> ⚡ Overlap</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-session-check" value="london" checked /> 🇬🇧 London</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-session-check" value="new york" checked /> 🇺🇸 New York</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-session-check" value="asian" /> 🌏 Asian</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-session-check" value="off-hours" /> 🌙 Off-Hours</label>
+                </div>
+                <small class="setting-note">Permits MT5 auto-trades only during checked sessions (e.g. Overlap & London). Trades in unchecked sessions will not auto-execute.</small>
+              </div>
+
+              <div class="form-group">
+                <label>Allowed Auto-Execution Asset Categories</label>
+                <div class="tf-checkbox-grid">
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-cat-check" value="Forex" checked /> 💱 Forex</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-cat-check" value="Crypto" checked /> 🪙 Crypto</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-cat-check" value="Indices" checked /> 📈 Indices</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-cat-check" value="Commodities" checked /> 🥇 Metals</label>
+                  <label class="tf-check-label"><input type="checkbox" class="auto-trade-cat-check" value="Stocks" checked /> 🏢 Stocks</label>
+                </div>
+                <small class="setting-note">Permits MT5 auto-trades only for selected asset categories. Unchecked asset categories will be suppressed from auto-execution.</small>
               </div>
 
               <!-- Subsection 2: Position Sizing & Lifespan Guard (Applies to Auto & Manual Trades) -->

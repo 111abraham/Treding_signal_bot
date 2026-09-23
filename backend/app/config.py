@@ -32,7 +32,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default_dollar_risk": 50.0,
         "split_tp_mode": True,
         "auto_close_on_expiry": True,
+        "scan_categories": ["Forex", "Crypto", "Indices", "Commodities", "Stocks"],
+        "scan_sessions": ["overlap", "london", "new york", "asian", "off-hours"],
         "auto_trade_timeframes": ["1h", "4h"],
+        "auto_trade_sessions": ["overlap", "london", "new york"],
+        "auto_trade_categories": ["Forex", "Crypto", "Indices", "Commodities", "Stocks"],
         "prop_firm_guardrails": {
             "enabled": True,
             "max_simultaneous_trades": 3,

@@ -135,7 +135,11 @@ class StrategySettingsRequest(BaseModel):
     auto_trade_dual_ai_only: Optional[bool] = None
     split_tp_mode: Optional[bool] = None
     auto_close_on_expiry: Optional[bool] = None
+    scan_categories: Optional[List[str]] = None
+    scan_sessions: Optional[List[str]] = None
     auto_trade_timeframes: Optional[List[str]] = None
+    auto_trade_sessions: Optional[List[str]] = None
+    auto_trade_categories: Optional[List[str]] = None
     prop_guard_enabled: Optional[bool] = None
     prop_max_trades: Optional[int] = None
     prop_max_per_symbol: Optional[int] = None
@@ -617,6 +621,14 @@ async def update_strategy_settings(req: StrategySettingsRequest):
         strat["auto_close_on_expiry"] = req.auto_close_on_expiry
     if req.auto_trade_timeframes is not None:
         strat["auto_trade_timeframes"] = [t.lower() for t in req.auto_trade_timeframes]
+    if req.scan_categories is not None:
+        strat["scan_categories"] = req.scan_categories
+    if req.scan_sessions is not None:
+        strat["scan_sessions"] = [s.lower() for s in req.scan_sessions]
+    if req.auto_trade_sessions is not None:
+        strat["auto_trade_sessions"] = [s.lower() for s in req.auto_trade_sessions]
+    if req.auto_trade_categories is not None:
+        strat["auto_trade_categories"] = req.auto_trade_categories
 
     prop_guard = strat.get("prop_firm_guardrails", {})
     if req.prop_guard_enabled is not None:

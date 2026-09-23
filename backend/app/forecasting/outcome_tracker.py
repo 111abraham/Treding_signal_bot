@@ -700,29 +700,34 @@ class OutcomeTracker:
 
         if session and session.upper() != "ALL":
             s_trade = str(trade.get("session_name") or trade.get("session") or "").lower()
-            s_target = session.lower()
-            if s_target == "london":
-                if not ("london" in s_trade and "overlap" not in s_trade):
-                    return False
-            elif s_target == "overlap":
-                if "overlap" not in s_trade:
-                    return False
-            elif s_target in ("ny", "new york"):
-                if not (("new york" in s_trade or "ny" in s_trade) and "overlap" not in s_trade):
-                    return False
-            elif s_target == "asian":
-                if "asian" not in s_trade:
-                    return False
-            elif s_target in ("off-hours", "offhours"):
-                if not ("off-hours" in s_trade or "rollover" in s_trade):
-                    return False
-            else:
-                if s_target not in s_trade:
-                    return False
+            session_targets = [s.strip().lower() for s in session.split(",") if s.strip()]
+            
+            def _match_sess(s_target: str) -> bool:
+                if s_target == "london":
+                    return "london" in s_trade and "overlap" not in s_trade
+                elif s_target == "overlap":
+                    return "overlap" in s_trade
+                elif s_target in ("ny", "new york"):
+                    return ("new york" in s_trade or "ny" in s_trade) and "overlap" not in s_trade
+                elif s_target == "asian":
+                    return "asian" in s_trade
+                elif s_target in ("off-hours", "offhours"):
+                    return "off-hours" in s_trade or "rollover" in s_trade
+                return s_target in s_trade
+
+            if not any(_match_sess(tgt) for tgt in session_targets):
+                return False
 
         if category and category.upper() != "ALL":
             cat_trade = str(trade.get("category") or "").lower()
-            if category.lower() != cat_trade:
+            category_targets = [c.strip().lower() for c in category.split(",") if c.strip()]
+
+            def _match_cat(c_target: str) -> bool:
+                if c_target in ("commodities", "metals"):
+                    return cat_trade in ("commodities", "metals")
+                return c_target == cat_trade
+
+            if not any(_match_cat(tgt) for tgt in category_targets):
                 return False
 
         if symbol and symbol.strip():
