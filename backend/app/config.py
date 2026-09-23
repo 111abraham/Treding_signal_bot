@@ -17,8 +17,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "auto_scan_enabled": True,
     "strategy": {
         "max_spread_to_sl_ratio": 0.05,  # User rule: spread must be < 5% of (Entry - StopLoss)
-        "require_london_ny_overlap": False,  # If True, only triggers during 13:00 - 16:30 UTC
-        "filter_low_liquidity_sessions": True,  # Suppress Asian (00:00-08:00 UTC) and Off-Hours for non-crypto
         "highlight_session_overlap": True,
         "min_conviction": 65.0,  # Minimum confidence score % (0-100)
         "min_risk_reward": 1.5,

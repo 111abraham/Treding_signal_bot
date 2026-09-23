@@ -149,17 +149,8 @@ class SignalGenerator:
         min_required_conviction = strategy_config.get("min_conviction", 65.0)
         is_rollover = session_info.get("is_rollover", False)
 
-        # Institutional Session Filter: Suppress low-liquidity chop for non-crypto assets
+        # Institutional Session Filter: Restrict signal generation to user-configured sessions (Crypto runs 24/7)
         passes_session_filter = True
-        if strategy_config.get("require_london_ny_overlap", False) and not is_overlap:
-            passes_session_filter = False
-
-        if strategy_config.get("filter_low_liquidity_sessions", True) and category != "Crypto":
-            is_asian = session_info.get("is_asian", False)
-            active_sess = session_info.get("active_session", "")
-            if is_asian or "Off-Hours" in active_sess:
-                passes_session_filter = False
-
         scan_sessions = [s.lower() for s in strategy_config.get("scan_sessions", [])]
         if scan_sessions and len(scan_sessions) < 5 and category != "Crypto":
             active_sess_str = (session_info.get("active_session") or "").lower()

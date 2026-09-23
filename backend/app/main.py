@@ -118,8 +118,6 @@ class StrategySettingsRequest(BaseModel):
     timeframe: Optional[str] = None
     scan_timeframes: Optional[List[str]] = None
     max_spread_to_sl_ratio: Optional[float] = None
-    require_london_ny_overlap: Optional[bool] = None
-    filter_low_liquidity_sessions: Optional[bool] = None
     min_conviction: Optional[float] = None
     scan_interval_minutes: Optional[int] = None
     auto_scan_enabled: Optional[bool] = None
@@ -595,10 +593,6 @@ async def update_strategy_settings(req: StrategySettingsRequest):
     strat = config_manager.get("strategy", {})
     if req.max_spread_to_sl_ratio is not None:
         strat["max_spread_to_sl_ratio"] = req.max_spread_to_sl_ratio
-    if req.require_london_ny_overlap is not None:
-        strat["require_london_ny_overlap"] = req.require_london_ny_overlap
-    if req.filter_low_liquidity_sessions is not None:
-        strat["filter_low_liquidity_sessions"] = req.filter_low_liquidity_sessions
     if req.min_conviction is not None:
         strat["min_conviction"] = req.min_conviction
     if req.forecast_candles is not None:

@@ -86,9 +86,9 @@
         <div class="category-tabs">
           <button class="cat-tab active" data-category="ALL">ALL</button>
           <button class="cat-tab" data-category="Forex">Forex</button>
-          <button class="cat-tab" data-category="Commodities">Commodities</button>
-          <button class="cat-tab" data-category="Indices">Indices</button>
           <button class="cat-tab" data-category="Crypto">Crypto</button>
+          <button class="cat-tab" data-category="Indices">Indices</button>
+          <button class="cat-tab" data-category="Commodities">Metals</button>
           <button class="cat-tab" data-category="Stocks">Stocks</button>
         </div>
 
@@ -575,16 +575,6 @@
                 <input type="checkbox" id="autoScanEnabled" checked />
               </div>
               <small class="setting-note">Runs background AI market scanning automatically according to your scan interval.</small>
-              <div class="form-group toggle-group">
-                <label for="filterLowLiquiditySessions">Filter Low-Liquidity & Asian Sessions (Non-Crypto)</label>
-                <input type="checkbox" id="filterLowLiquiditySessions" checked />
-              </div>
-              <small class="setting-note">Institutional Filter: Suppresses Forex, Indices, and Metals during low-volume Asian (00:00-08:00 UTC) and Off-Hours sessions. Crypto runs 24/7.</small>
-              <div class="form-group toggle-group">
-                <label for="requireLondonNyOverlap">Require London-NY Overlap Only (Strict Institutional)</label>
-                <input type="checkbox" id="requireLondonNyOverlap" />
-              </div>
-              <small class="setting-note">Strict Institutional Filter: Restricts trading strictly to the London & New York institutional overlap window (13:00-16:30 UTC).</small>
             </div>
 
             <!-- Google TimesFM Foundation Model Arbiter -->

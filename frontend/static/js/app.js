@@ -1361,7 +1361,18 @@ async function loadWatchlist() {
 function renderWatchlist() {
   const filtered = watchlistData.filter((item) => {
     if (currentCategory === "ALL") return true;
-    return item.category.toLowerCase() === currentCategory.toLowerCase();
+    const cat = (item.category || "").toLowerCase();
+    const cur = currentCategory.toLowerCase();
+    if ((cur === "commodities" || cur === "metals") && (cat === "commodities" || cat === "metals")) return true;
+    return cat === cur;
+  });
+
+  // Cleanly sort: Active items first, then alphabetical by symbol
+  filtered.sort((a, b) => {
+    const aActive = a.active !== false;
+    const bActive = b.active !== false;
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return (a.symbol || "").localeCompare(b.symbol || "");
   });
 
   watchlistContainer.innerHTML = "";
@@ -2643,10 +2654,6 @@ function setupEventListeners() {
       document.getElementById("showCountdownTimers").checked = cfg.strategy?.show_countdown_timers !== false;
       const elMarkers = document.getElementById("showChartTradeMarkers");
       if (elMarkers) elMarkers.checked = cfg.strategy?.show_chart_trade_markers !== false;
-      const elFilterLowLiq = document.getElementById("filterLowLiquiditySessions");
-      if (elFilterLowLiq) elFilterLowLiq.checked = cfg.strategy?.filter_low_liquidity_sessions !== false;
-      const elReqOverlap = document.getElementById("requireLondonNyOverlap");
-      if (elReqOverlap) elReqOverlap.checked = cfg.strategy?.require_london_ny_overlap === true;
 
       // Populate multi-timeframe checkboxes
       const savedTfs = cfg.scan_timeframes || ["5m", "15m", "1h", "4h"];
@@ -2759,8 +2766,6 @@ function setupEventListeners() {
       min_conviction: parseFloat(document.getElementById("minConviction").value),
       scan_interval_minutes: parseInt(document.getElementById("scanInterval").value),
       auto_scan_enabled: document.getElementById("autoScanEnabled").checked,
-      filter_low_liquidity_sessions: document.getElementById("filterLowLiquiditySessions")?.checked !== false,
-      require_london_ny_overlap: document.getElementById("requireLondonNyOverlap")?.checked === true,
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
       scan_categories: selectedScanCats.length > 0 ? selectedScanCats : ["Forex", "Crypto", "Indices", "Commodities", "Stocks"],
       scan_sessions: selectedScanSessions.length > 0 ? selectedScanSessions : ["overlap", "london", "new york", "asian", "off-hours"],
