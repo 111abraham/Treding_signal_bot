@@ -441,11 +441,12 @@ async def get_performance(
     session: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     symbol: Optional[str] = Query(None),
-    limit: int = Query(100)
+    limit: Optional[int] = Query(None, description="Optional limit for closed trades; defaults to None (unlimited/no hard cap)")
 ):
     """
     Returns closed and active trade outcome metrics, win-rate, profit factor,
     and performance filtered by minimum conviction %, timeframe, session, asset category, and Dual AI status.
+    If limit is None or <= 0, returns the entire ledger of outcomes with no hard cap.
     """
     stats = outcome_tracker.get_statistics(
         min_conviction=min_conviction,

@@ -1753,6 +1753,7 @@ function renderOutcomesList() {
   }
 
   resolvedTradesList.innerHTML = "";
+  const frag = document.createDocumentFragment();
   list.forEach((tr) => {
     const card = document.createElement("div");
     card.className = "signal-card-mini";
@@ -1865,13 +1866,14 @@ function renderOutcomesList() {
       frameChartToCandle(targetUnix, currentTimeframe);
     });
 
-    resolvedTradesList.appendChild(card);
+    frag.appendChild(card);
   });
+  resolvedTradesList.appendChild(frag);
 }
 
 async function loadPerformance() {
   try {
-    const res = await fetch(`/api/performance?limit=200`);
+    const res = await fetch(`/api/performance`);
     if (!res.ok) return;
     const data = await res.json();
     const closedTrades = data.closed_trades || [];

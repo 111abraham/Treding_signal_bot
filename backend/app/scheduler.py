@@ -228,10 +228,10 @@ class ScanEngine:
             self.is_scanning = False
 
     def _add_to_history(self, signal: Dict[str, Any]):
-        # Prepend to history, retain max 100 entries
+        # Prepend to history, retain up to 1000 entries
         self.signal_history.insert(0, signal)
-        if len(self.signal_history) > 100:
-            self.signal_history = self.signal_history[:100]
+        if len(self.signal_history) > 1000:
+            self.signal_history = self.signal_history[:1000]
 
     def get_history(self) -> List[Dict[str, Any]]:
         return self.signal_history

@@ -814,14 +814,14 @@ class OutcomeTracker:
 
     def get_trades_log(
         self,
-        limit: Optional[int] = 50,
+        limit: Optional[int] = None,
         timeframe: Optional[str] = None,
         dual_ai_only: Optional[bool] = None,
         session: Optional[str] = None,
         category: Optional[str] = None,
         symbol: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Returns active and closed trades enriched with dynamic countdown metrics with optional filters."""
+        """Returns active and closed trades enriched with dynamic countdown metrics with optional filters. If limit is None or <=0, returns the entire outcomes ledger with no hard cap."""
         now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         step_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
         
