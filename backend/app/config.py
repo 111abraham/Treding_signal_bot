@@ -10,7 +10,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "app_name": "AI Quant Trading Forecast Terminal",
     "version": "1.0.0",
     "timeframe": "1h",  # Active chart view default: '5m', '15m', '1h', '4h', '1d'
-    "scan_timeframes": ["5m", "15m", "1h", "4h"],  # Timeframes scanned by automated engine
+    "scan_timeframes": ["1h", "4h"],  # High-expectancy timeframes scanned by automated engine
     "lookback_candles": 500,
     "forecast_candles": 5,
     "scan_interval_minutes": 15,
@@ -18,6 +18,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "strategy": {
         "max_spread_to_sl_ratio": 0.05,  # User rule: spread must be < 5% of (Entry - StopLoss)
         "require_london_ny_overlap": False,  # If True, only triggers during 13:00 - 16:30 UTC
+        "filter_low_liquidity_sessions": True,  # Suppress Asian (00:00-08:00 UTC) and Off-Hours for non-crypto
         "highlight_session_overlap": True,
         "min_conviction": 65.0,  # Minimum confidence score % (0-100)
         "min_risk_reward": 1.5,
@@ -123,7 +124,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         {"symbol": "ESP35", "name": "Spain 35 (IBEX)", "category": "Indices", "active": True, "est_spread_pct": 0.025},
         
         # Commodities & Metals (5)
-        {"symbol": "XAUUSD", "name": "Gold vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.012},
+        {"symbol": "XAUUSD", "name": "Gold vs US-Dollar", "category": "Commodities", "active": False, "est_spread_pct": 0.012},
         {"symbol": "XAGUSD", "name": "Silver vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.015},
         {"symbol": "XPTUSD", "name": "Platinum vs US-Dollar", "category": "Commodities", "active": True, "est_spread_pct": 0.020},
         {"symbol": "USOUSD", "name": "WTI Crude Oil", "category": "Commodities", "active": True, "est_spread_pct": 0.018},

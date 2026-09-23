@@ -149,8 +149,20 @@ class SignalGenerator:
         min_required_conviction = strategy_config.get("min_conviction", 65.0)
         is_rollover = session_info.get("is_rollover", False)
 
+        # Institutional Session Filter: Suppress low-liquidity chop for non-crypto assets
+        passes_session_filter = True
+        if strategy_config.get("require_london_ny_overlap", False) and not is_overlap:
+            passes_session_filter = False
+
+        if strategy_config.get("filter_low_liquidity_sessions", True) and category != "Crypto":
+            is_asian = session_info.get("is_asian", False)
+            active_sess = session_info.get("active_session", "")
+            if is_asian or "Off-Hours" in active_sess:
+                passes_session_filter = False
+
         is_actionable = (
             passes_spread_filter and
+            passes_session_filter and
             not is_rollover and  # Suppress all signals during 20:00 - 23:00 UTC rollover spread expansion
             conviction >= min_required_conviction and
             rr_ratio >= strategy_config.get("min_risk_reward", 1.5)
@@ -199,6 +211,7 @@ class SignalGenerator:
             "estimated_spread": round(actual_spread_value, 4),
             "spread_to_sl_ratio_pct": round(spread_to_sl_ratio * 100, 2),
             "passes_spread_filter": passes_spread_filter,
+            "passes_session_filter": passes_session_filter,
             "spread_source": spread_source,
             "live_spread_points": spread_points,
             "conviction": conviction,

@@ -40,6 +40,9 @@ def get_current_session_info() -> Dict[str, Any]:
         "current_utc": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "active_session": " & ".join(session_names),
         "is_london_ny_overlap": is_overlap,
+        "is_london": is_london,
+        "is_ny": is_ny,
+        "is_asian": is_asian,
         "is_high_liquidity": is_overlap or (is_london and hour >= 8.5) or (is_ny and hour <= 18.0),
         "is_rollover": is_rollover
     }

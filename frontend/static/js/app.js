@@ -2325,6 +2325,10 @@ function setupEventListeners() {
       document.getElementById("showCountdownTimers").checked = cfg.strategy?.show_countdown_timers !== false;
       const elMarkers = document.getElementById("showChartTradeMarkers");
       if (elMarkers) elMarkers.checked = cfg.strategy?.show_chart_trade_markers !== false;
+      const elFilterLowLiq = document.getElementById("filterLowLiquiditySessions");
+      if (elFilterLowLiq) elFilterLowLiq.checked = cfg.strategy?.filter_low_liquidity_sessions !== false;
+      const elReqOverlap = document.getElementById("requireLondonNyOverlap");
+      if (elReqOverlap) elReqOverlap.checked = cfg.strategy?.require_london_ny_overlap === true;
 
       // Populate multi-timeframe checkboxes
       const savedTfs = cfg.scan_timeframes || ["5m", "15m", "1h", "4h"];
@@ -2405,6 +2409,8 @@ function setupEventListeners() {
       min_conviction: parseFloat(document.getElementById("minConviction").value),
       scan_interval_minutes: parseInt(document.getElementById("scanInterval").value),
       auto_scan_enabled: document.getElementById("autoScanEnabled").checked,
+      filter_low_liquidity_sessions: document.getElementById("filterLowLiquiditySessions")?.checked !== false,
+      require_london_ny_overlap: document.getElementById("requireLondonNyOverlap")?.checked === true,
       scan_timeframes: selectedTfs.length > 0 ? selectedTfs : ["1h"],
       forecast_candles: parseInt(document.getElementById("forecastCandles").value) || 5,
       show_countdown_timers: document.getElementById("showCountdownTimers").checked,
