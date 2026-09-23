@@ -676,29 +676,81 @@ class OutcomeTracker:
         except Exception as e:
             logger.warning(f"Could not send resolution telegram: {e}")
 
+    @staticmethod
+    def _matches_filters(
+        trade: Dict[str, Any],
+        min_conviction: Optional[float] = None,
+        timeframe: Optional[str] = None,
+        dual_ai_only: Optional[bool] = None,
+        session: Optional[str] = None,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None
+    ) -> bool:
+        if min_conviction is not None and min_conviction > 0:
+            if float(trade.get("conviction", 0)) < min_conviction:
+                return False
+
+        if dual_ai_only and not trade.get("dual_ai_confluence"):
+            return False
+
+        if timeframe and timeframe.upper() != "ALL":
+            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
+            if (trade.get("timeframe") or "").lower() not in tf_set:
+                return False
+
+        if session and session.upper() != "ALL":
+            s_trade = str(trade.get("session_name") or trade.get("session") or "").lower()
+            s_target = session.lower()
+            if s_target == "london":
+                if not ("london" in s_trade and "overlap" not in s_trade):
+                    return False
+            elif s_target == "overlap":
+                if "overlap" not in s_trade:
+                    return False
+            elif s_target in ("ny", "new york"):
+                if not (("new york" in s_trade or "ny" in s_trade) and "overlap" not in s_trade):
+                    return False
+            elif s_target == "asian":
+                if "asian" not in s_trade:
+                    return False
+            elif s_target in ("off-hours", "offhours"):
+                if not ("off-hours" in s_trade or "rollover" in s_trade):
+                    return False
+            else:
+                if s_target not in s_trade:
+                    return False
+
+        if category and category.upper() != "ALL":
+            cat_trade = str(trade.get("category") or "").lower()
+            if category.lower() != cat_trade:
+                return False
+
+        if symbol and symbol.strip():
+            sym_trade = str(trade.get("symbol") or "").lower()
+            if symbol.strip().lower() not in sym_trade:
+                return False
+
+        return True
+
     def get_statistics(
         self,
         min_conviction: Optional[float] = None,
         timeframe: Optional[str] = None,
-        dual_ai_only: Optional[bool] = None
+        dual_ai_only: Optional[bool] = None,
+        session: Optional[str] = None,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Calculates win rate, profit factor, R-multiples, and conviction breakdown with optional timeframe and Dual AI filters."""
-        filtered = self.closed_trades
-        active = self.active_trades
-
-        if min_conviction is not None:
-            filtered = [t for t in filtered if t.get("conviction", 0) >= min_conviction]
-
-        if dual_ai_only:
-            filtered = [t for t in filtered if t.get("dual_ai_confluence") is True]
-            active = [t for t in active if t.get("dual_ai_confluence") is True]
-
-        if timeframe and timeframe.upper() != "ALL":
-            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
-            filtered = [t for t in filtered if (t.get("timeframe") or "").lower() in tf_set]
-            active_cnt = len([t for t in active if (t.get("timeframe") or "").lower() in tf_set])
-        else:
-            active_cnt = len(active)
+        """Calculates win rate, profit factor, R-multiples, and conviction breakdown with optional timeframe, session, and asset filters."""
+        filtered = [
+            t for t in self.closed_trades
+            if self._matches_filters(t, min_conviction, timeframe, dual_ai_only, session, category, symbol)
+        ]
+        active = [
+            t for t in self.active_trades
+            if self._matches_filters(t, min_conviction, timeframe, dual_ai_only, session, category, symbol)
+        ]
+        active_cnt = len(active)
 
         total = len(filtered)
         if total == 0:
@@ -759,23 +811,23 @@ class OutcomeTracker:
         self,
         limit: Optional[int] = 50,
         timeframe: Optional[str] = None,
-        dual_ai_only: Optional[bool] = None
+        dual_ai_only: Optional[bool] = None,
+        session: Optional[str] = None,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Returns active and closed trades enriched with dynamic countdown metrics with optional timeframe and Dual AI filters."""
+        """Returns active and closed trades enriched with dynamic countdown metrics with optional filters."""
         now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         step_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
         
-        raw_active = self.active_trades
-        raw_closed = self.closed_trades
-
-        if dual_ai_only:
-            raw_active = [t for t in raw_active if t.get("dual_ai_confluence") is True]
-            raw_closed = [t for t in raw_closed if t.get("dual_ai_confluence") is True]
-
-        if timeframe and timeframe.upper() != "ALL":
-            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
-            raw_active = [t for t in raw_active if (t.get("timeframe") or "").lower() in tf_set]
-            raw_closed = [t for t in raw_closed if (t.get("timeframe") or "").lower() in tf_set]
+        raw_active = [
+            t for t in self.active_trades
+            if self._matches_filters(t, None, timeframe, dual_ai_only, session, category, symbol)
+        ]
+        raw_closed = [
+            t for t in self.closed_trades
+            if self._matches_filters(t, None, timeframe, dual_ai_only, session, category, symbol)
+        ]
 
         enriched_active = []
         for t in raw_active:
@@ -806,31 +858,27 @@ class OutcomeTracker:
             "active": enriched_active,
             "closed": closed_slice,
             "total_closed_count": len(raw_closed),
-            "stats": self.get_statistics(timeframe=timeframe)
+            "stats": self.get_statistics(timeframe=timeframe, dual_ai_only=dual_ai_only, session=session, category=category, symbol=symbol)
         }
 
     def export_history(
         self,
         timeframe: Optional[str] = None,
         min_conviction: Optional[float] = None,
-        dual_ai_only: Optional[bool] = None
+        dual_ai_only: Optional[bool] = None,
+        session: Optional[str] = None,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Exports trade history database, with optional timeframe, conviction, and Dual AI filtering."""
-        closed = self.closed_trades
-        active = self.active_trades
-
-        if dual_ai_only:
-            closed = [t for t in closed if t.get("dual_ai_confluence") is True]
-            active = [t for t in active if t.get("dual_ai_confluence") is True]
-
-        if min_conviction is not None and min_conviction > 0:
-            closed = [t for t in closed if float(t.get("conviction", 0)) >= min_conviction]
-            active = [t for t in active if float(t.get("conviction", 0)) >= min_conviction]
-
-        if timeframe and timeframe.upper() != "ALL":
-            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
-            closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
-            active = [t for t in active if (t.get("timeframe") or "").lower() in tf_set]
+        """Exports trade history database, with optional timeframe, conviction, session, category, and Dual AI filtering."""
+        closed = [
+            t for t in self.closed_trades
+            if self._matches_filters(t, min_conviction, timeframe, dual_ai_only, session, category, symbol)
+        ]
+        active = [
+            t for t in self.active_trades
+            if self._matches_filters(t, min_conviction, timeframe, dual_ai_only, session, category, symbol)
+        ]
 
         return {
             "version": "1.0",
@@ -838,9 +886,19 @@ class OutcomeTracker:
             "filter_timeframe": timeframe or "ALL",
             "filter_min_conviction": min_conviction,
             "filter_dual_ai_only": bool(dual_ai_only),
+            "filter_session": session or "ALL",
+            "filter_category": category or "ALL",
+            "filter_symbol": symbol or "",
             "total_closed": len(closed),
             "total_active": len(active),
-            "statistics": self.get_statistics(timeframe=timeframe, min_conviction=min_conviction, dual_ai_only=dual_ai_only),
+            "statistics": self.get_statistics(
+                min_conviction=min_conviction,
+                timeframe=timeframe,
+                dual_ai_only=dual_ai_only,
+                session=session,
+                category=category,
+                symbol=symbol
+            ),
             "active_trades": active,
             "closed_trades": closed
         }
@@ -849,22 +907,19 @@ class OutcomeTracker:
         self,
         timeframe: Optional[str] = None,
         min_conviction: Optional[float] = None,
-        dual_ai_only: Optional[bool] = None
+        dual_ai_only: Optional[bool] = None,
+        session: Optional[str] = None,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None
     ) -> str:
         """Exports closed and active trades as a CSV string formatted for Excel / Sheets with optional filters."""
         import io
         import csv
 
-        closed = self.closed_trades
-        if dual_ai_only:
-            closed = [t for t in closed if t.get("dual_ai_confluence") is True]
-
-        if min_conviction is not None and min_conviction > 0:
-            closed = [t for t in closed if float(t.get("conviction", 0)) >= min_conviction]
-
-        if timeframe and timeframe.upper() != "ALL":
-            tf_set = {x.strip().lower() for x in timeframe.split(",") if x.strip()}
-            closed = [t for t in closed if (t.get("timeframe") or "").lower() in tf_set]
+        closed = [
+            t for t in self.closed_trades
+            if self._matches_filters(t, min_conviction, timeframe, dual_ai_only, session, category, symbol)
+        ]
 
         output = io.StringIO()
         writer = csv.writer(output)

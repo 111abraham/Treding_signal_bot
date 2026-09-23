@@ -39,6 +39,49 @@ function getSelectedTfsDisplay() {
   if (selectedTfs.has("ALL")) return "ALL";
   return Array.from(selectedTfs).map((t) => (t.toUpperCase() === "1D" ? "1D" : t)).join(" + ");
 }
+
+let selectedSession = "ALL";
+let selectedCategory = "ALL";
+let symbolSearchFilter = "";
+
+function isSessionSelected(sessionName) {
+  if (!selectedSession || selectedSession === "ALL") return true;
+  if (!sessionName) return false;
+  const s = String(sessionName).toLowerCase();
+  const tgt = selectedSession.toLowerCase();
+  if (tgt === "london") {
+    return s.includes("london") && !s.includes("overlap");
+  } else if (tgt === "overlap") {
+    return s.includes("overlap");
+  } else if (tgt === "ny" || tgt === "new york") {
+    return (s.includes("new york") || s.includes("ny")) && !s.includes("overlap");
+  } else if (tgt === "asian") {
+    return s.includes("asian");
+  } else if (tgt === "off-hours" || tgt === "offhours") {
+    return s.includes("off-hours") || s.includes("rollover");
+  }
+  return s.includes(tgt);
+}
+
+function isCategorySelected(category, symbol) {
+  if (selectedCategory && selectedCategory !== "ALL") {
+    if (!category) return false;
+    const cat = String(category).toLowerCase();
+    const tgt = selectedCategory.toLowerCase();
+    if (tgt === "commodities" || tgt === "metals") {
+      if (cat !== "commodities" && cat !== "metals") return false;
+    } else if (cat !== tgt) {
+      return false;
+    }
+  }
+  if (symbolSearchFilter) {
+    if (!symbol || !String(symbol).toLowerCase().includes(symbolSearchFilter.toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+}
+
 let showChartTradeMarkers = true;
 let autoCloseOnExpiryEnabled = true;
 let pinnedActiveSignal = null;
@@ -1423,11 +1466,17 @@ function renderSignalsList() {
     return timeB - timeA;
   });
 
-  // 2. Filter by selected timeframe(s)
+  // 2. Filter by selected timeframe(s), session, asset category, and symbol
   let filtered = selectedTfs.has("ALL")
     ? sorted
     : sorted.filter((s) => isTfSelected(s.timeframe));
 
+  if (selectedSession !== "ALL") {
+    filtered = filtered.filter((s) => isSessionSelected(s.session_name || s.session));
+  }
+  if (selectedCategory !== "ALL" || symbolSearchFilter) {
+    filtered = filtered.filter((s) => isCategorySelected(s.category, s.symbol));
+  }
   if (perfDualAiOnly && perfDualAiOnly.checked) {
     filtered = filtered.filter((s) => s.dual_ai_confluence === true);
   }
@@ -1543,6 +1592,14 @@ function updatePerformanceDisplay() {
     filtered = filtered.filter((t) => isTfSelected(t.timeframe));
     activeFiltered = activeFiltered.filter((t) => isTfSelected(t.timeframe));
   }
+  if (selectedSession !== "ALL") {
+    filtered = filtered.filter((t) => isSessionSelected(t.session_name || t.session));
+    activeFiltered = activeFiltered.filter((t) => isSessionSelected(t.session_name || t.session));
+  }
+  if (selectedCategory !== "ALL" || symbolSearchFilter) {
+    filtered = filtered.filter((t) => isCategorySelected(t.category, t.symbol));
+    activeFiltered = activeFiltered.filter((t) => isCategorySelected(t.category, t.symbol));
+  }
 
   const total = filtered.length;
   let wins = 0;
@@ -1637,6 +1694,12 @@ function renderOutcomesList() {
       return false;
     }
     if (perfDualAiOnly && perfDualAiOnly.checked && !tr.dual_ai_confluence) {
+      return false;
+    }
+    if (!isSessionSelected(tr.session_name || tr.session)) {
+      return false;
+    }
+    if (!isCategorySelected(tr.category, tr.symbol)) {
       return false;
     }
     return true;
@@ -1930,7 +1993,10 @@ function setupEventListeners() {
       const isDualAi = perfDualAiOnly && perfDualAiOnly.checked;
       const dualParam = isDualAi ? "&dual_ai_only=true" : "";
       const convParam = currentMinConviction && currentMinConviction > 0 ? `&min_conviction=${currentMinConviction}` : "";
-      const res = await fetch(`/api/performance/export?format=${format}${tfParam}${dualParam}${convParam}`);
+      const sessParam = selectedSession && selectedSession !== "ALL" ? `&session=${encodeURIComponent(selectedSession)}` : "";
+      const catParam = selectedCategory && selectedCategory !== "ALL" ? `&category=${encodeURIComponent(selectedCategory)}` : "";
+      const symParam = symbolSearchFilter ? `&symbol=${encodeURIComponent(symbolSearchFilter)}` : "";
+      const res = await fetch(`/api/performance/export?format=${format}${tfParam}${dualParam}${convParam}${sessParam}${catParam}${symParam}`);
       if (!res.ok) throw new Error("Failed to export history");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -1938,9 +2004,11 @@ function setupEventListeners() {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const ext = format === "csv" ? "csv" : "json";
       const tfSuffix = tf && tf.toUpperCase() !== "ALL" ? `_${tf}` : "";
+      const sessSuffix = selectedSession && selectedSession !== "ALL" ? `_${selectedSession}` : "";
+      const catSuffix = selectedCategory && selectedCategory !== "ALL" ? `_${selectedCategory}` : "";
       const dualSuffix = isDualAi ? "_dual_ai" : "";
       a.href = url;
-      a.download = `trade_history${tfSuffix}${dualSuffix}_${ts}.${ext}`;
+      a.download = `trade_history${tfSuffix}${sessSuffix}${catSuffix}${dualSuffix}_${ts}.${ext}`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -2200,6 +2268,156 @@ function setupEventListeners() {
     });
   }
 
+  // Session & Overlap Filter Tabs
+  document.querySelectorAll(".sig-session-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".sig-session-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedSession = btn.dataset.session || "ALL";
+      renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
+    });
+  });
+
+  // Asset Category Filter Tabs
+  document.querySelectorAll(".sig-asset-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".sig-asset-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedCategory = btn.dataset.category || "ALL";
+      renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
+    });
+  });
+
+  // Symbol Search Input
+  const symbolSearchInput = document.getElementById("symbolSearchInput");
+  const btnClearSymbolSearch = document.getElementById("btnClearSymbolSearch");
+  if (symbolSearchInput) {
+    symbolSearchInput.addEventListener("input", (e) => {
+      symbolSearchFilter = e.target.value.trim();
+      if (btnClearSymbolSearch) {
+        btnClearSymbolSearch.style.display = symbolSearchFilter ? "inline-block" : "none";
+      }
+      renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
+    });
+  }
+
+  if (btnClearSymbolSearch) {
+    btnClearSymbolSearch.addEventListener("click", () => {
+      if (symbolSearchInput) symbolSearchInput.value = "";
+      symbolSearchFilter = "";
+      btnClearSymbolSearch.style.display = "none";
+      renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
+    });
+  }
+
+  // Reset All Filters Button
+  const btnResetAllFilters = document.getElementById("btnResetAllFilters");
+  if (btnResetAllFilters) {
+    btnResetAllFilters.addEventListener("click", () => {
+      selectedTfs = new Set(["ALL"]);
+      currentSignalTfFilter = "ALL";
+      document.querySelectorAll(".sig-tf-tab").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tf === "ALL");
+      });
+
+      selectedSession = "ALL";
+      document.querySelectorAll(".sig-session-tab").forEach((b) => {
+        b.classList.toggle("active", b.dataset.session === "ALL");
+      });
+
+      selectedCategory = "ALL";
+      document.querySelectorAll(".sig-asset-tab").forEach((b) => {
+        b.classList.toggle("active", b.dataset.category === "ALL");
+      });
+
+      if (symbolSearchInput) symbolSearchInput.value = "";
+      symbolSearchFilter = "";
+      if (btnClearSymbolSearch) btnClearSymbolSearch.style.display = "none";
+
+      renderSignalsList();
+      renderOutcomesList();
+      updatePerformanceDisplay();
+    });
+  }
+
+  // Settings Hover Notes Toggle & Floating Tooltip System
+  const toggleHoverNotes = document.getElementById("toggleSettingsHoverNotes");
+  const modalDialog = document.getElementById("settingsModalDialog");
+  let floatingTooltip = document.getElementById("settingsFloatingTooltip");
+  if (!floatingTooltip) {
+    floatingTooltip = document.createElement("div");
+    floatingTooltip.id = "settingsFloatingTooltip";
+    document.body.appendChild(floatingTooltip);
+  }
+
+  function setHoverNotesMode(enabled) {
+    if (!modalDialog) return;
+    if (enabled) {
+      modalDialog.classList.add("modal-hover-notes");
+    } else {
+      modalDialog.classList.remove("modal-hover-notes");
+    }
+    if (floatingTooltip) floatingTooltip.classList.remove("visible");
+    try {
+      localStorage.setItem("settings_hover_notes", enabled ? "true" : "false");
+    } catch (_) {}
+  }
+
+  if (toggleHoverNotes) {
+    const saved = localStorage.getItem("settings_hover_notes");
+    const isHover = saved !== "false";
+    toggleHoverNotes.checked = isHover;
+    setHoverNotesMode(isHover);
+
+    toggleHoverNotes.addEventListener("change", (e) => {
+      setHoverNotesMode(e.target.checked);
+    });
+  }
+
+  const settingsFormElem = document.getElementById("settingsForm");
+  if (settingsFormElem) {
+    settingsFormElem.addEventListener("mouseover", (e) => {
+      if (!modalDialog || !modalDialog.classList.contains("modal-hover-notes")) return;
+      const group = e.target.closest(".form-group, .tf-checkbox-grid");
+      if (!group) return;
+
+      const noteElem = group.querySelector(".setting-note") || (group.nextElementSibling && group.nextElementSibling.classList.contains("setting-note") ? group.nextElementSibling : null);
+      const noteText = noteElem ? noteElem.textContent.trim() : (group.dataset.note || "");
+      if (!noteText) return;
+
+      const label = group.querySelector("label");
+      const titleText = label ? label.textContent.replace(/[:*]/g, "").trim() : "Setting Info";
+
+      floatingTooltip.innerHTML = `<div class="tooltip-title">💡 ${titleText}</div><div>${noteText}</div>`;
+      floatingTooltip.classList.add("visible");
+
+      const rect = group.getBoundingClientRect();
+      const tipWidth = 310;
+      let left = rect.right + 12;
+      if (left + tipWidth > window.innerWidth - 10) {
+        left = Math.max(10, rect.left - tipWidth - 12);
+      }
+      let top = Math.max(10, Math.min(window.innerHeight - 140, rect.top));
+      floatingTooltip.style.left = `${left}px`;
+      floatingTooltip.style.top = `${top}px`;
+    });
+
+    settingsFormElem.addEventListener("mouseout", (e) => {
+      const group = e.target.closest(".form-group, .tf-checkbox-grid");
+      if (!group || !e.relatedTarget || !group.contains(e.relatedTarget)) {
+        if (floatingTooltip) floatingTooltip.classList.remove("visible");
+      }
+    });
+  }
+
   // 1-Click MT5 Execution: Risk quick pills ($25, $50, $100, $250)
   let riskDebounceTimer = null;
   function saveRiskPreference(riskVal) {
@@ -2387,7 +2605,10 @@ function setupEventListeners() {
     }
   });
 
-  const closeSettings = () => (settingsModal.style.display = "none");
+  const closeSettings = () => {
+    settingsModal.style.display = "none";
+    if (floatingTooltip) floatingTooltip.classList.remove("visible");
+  };
   btnCloseSettings.addEventListener("click", closeSettings);
   btnCancelSettings.addEventListener("click", closeSettings);
 

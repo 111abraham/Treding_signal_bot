@@ -406,16 +406,50 @@
               <button class="hist-tab" id="tabResolvedTrades">Outcomes (<span id="resolvedCountBadge">0</span>)</button>
             </div>
           </div>
-          <!-- TIMEFRAME SUB-FILTER BAR -->
-          <div class="sig-tf-filter-bar" id="signalsTfFilterBar" title="Shift+Click or Ctrl+Click to select multiple timeframes (e.g. 15m + 1h)">
-            <span class="tf-filter-label" title="Shift+Click or Ctrl+Click to select multiple">Filter TF:</span>
-            <div class="sig-tf-tabs">
-              <button class="sig-tf-tab active" data-tf="ALL" title="Show all timeframes">ALL</button>
-              <button class="sig-tf-tab" data-tf="5m" title="5m (Shift+Click to combine)">5m</button>
-              <button class="sig-tf-tab" data-tf="15m" title="15m (Shift+Click to combine)">15m</button>
-              <button class="sig-tf-tab" data-tf="1h" title="1h (Shift+Click to combine)">1h</button>
-              <button class="sig-tf-tab" data-tf="4h" title="4h (Shift+Click to combine)">4h</button>
-              <button class="sig-tf-tab" data-tf="1d" title="1D (Shift+Click to combine)">1D</button>
+          <!-- MULTI-DIMENSIONAL EXPERIMENTATION FILTER DECK -->
+          <div class="filter-deck">
+            <!-- 1. TIMEFRAME FILTER BAR -->
+            <div class="sig-tf-filter-bar" id="signalsTfFilterBar" title="Shift+Click or Ctrl+Click to select multiple timeframes (e.g. 1h + 4h)">
+              <span class="tf-filter-label" title="Shift+Click or Ctrl+Click to select multiple">Filter TF:</span>
+              <div class="sig-tf-tabs">
+                <button class="sig-tf-tab active" data-tf="ALL" title="Show all timeframes">ALL</button>
+                <button class="sig-tf-tab" data-tf="5m" title="5m (Shift+Click to combine)">5m</button>
+                <button class="sig-tf-tab" data-tf="15m" title="15m (Shift+Click to combine)">15m</button>
+                <button class="sig-tf-tab" data-tf="1h" title="1h (Shift+Click to combine)">1h</button>
+                <button class="sig-tf-tab" data-tf="4h" title="4h (Shift+Click to combine)">4h</button>
+                <button class="sig-tf-tab" data-tf="1d" title="1D (Shift+Click to combine)">1D</button>
+              </div>
+            </div>
+
+            <!-- 2. SESSION & OVERLAP FILTER BAR -->
+            <div class="sig-tf-filter-bar" id="signalsSessionFilterBar">
+              <span class="tf-filter-label" title="Filter performance and signals by trading session">Session:</span>
+              <div class="sig-session-tabs">
+                <button class="sig-session-tab active" data-session="ALL" title="All market sessions">ALL</button>
+                <button class="sig-session-tab" data-session="overlap" title="London-NY Overlap (13:00-16:30 UTC - Prime Institutional Liquidity)">⚡ Overlap</button>
+                <button class="sig-session-tab" data-session="london" title="London European Session (08:00-16:30 UTC)">🇬🇧 London</button>
+                <button class="sig-session-tab" data-session="ny" title="New York US Session (13:00-21:00 UTC)">🇺🇸 New York</button>
+                <button class="sig-session-tab" data-session="asian" title="Asian Pacific Session (00:00-09:00 UTC)">🌏 Asian</button>
+                <button class="sig-session-tab" data-session="off-hours" title="Off-Hours & Daily Rollover Window">🌙 Off-Hours</button>
+              </div>
+            </div>
+
+            <!-- 3. ASSET CATEGORY & SYMBOL SEARCH BAR -->
+            <div class="sig-tf-filter-bar" id="signalsAssetFilterBar">
+              <span class="tf-filter-label" title="Filter performance and signals by asset class">Asset:</span>
+              <div class="sig-asset-tabs">
+                <button class="sig-asset-tab active" data-category="ALL">ALL</button>
+                <button class="sig-asset-tab" data-category="Forex" title="Currency Pairs">Forex</button>
+                <button class="sig-asset-tab" data-category="Crypto" title="24/7 Digital Assets (BTC, ETH)">Crypto</button>
+                <button class="sig-asset-tab" data-category="Indices" title="Stock Indices (NDX100, SPX500, US30, GER40)">Indices</button>
+                <button class="sig-asset-tab" data-category="Commodities" title="Metals & Energy (Gold, Silver, Oil)">Metals</button>
+                <button class="sig-asset-tab" data-category="Stocks" title="Equities CFD (AAPL, NVDA, TSLA)">Stocks</button>
+                <div class="symbol-search-wrap">
+                  <input type="text" id="symbolSearchInput" placeholder="🔍 Symbol..." title="Filter by ticker symbol (e.g. BTC, NDX, EUR)" />
+                  <button type="button" class="btn-clear-search" id="btnClearSymbolSearch" style="display:none;" title="Clear search">&times;</button>
+                </div>
+                <button type="button" class="hist-action-btn" id="btnResetAllFilters" title="Reset all dials to default (ALL)" style="margin-left: auto;">↺ Reset</button>
+              </div>
             </div>
           </div>
           <div class="card-body scrollable-history" id="signalHistoryList">
@@ -430,9 +464,16 @@
 
     <!-- SETTINGS & TELEGRAM MODAL -->
     <div class="modal-backdrop" id="settingsModal" style="display: none;">
-      <div class="modal-dialog">
+      <div class="modal-dialog modal-hover-notes" id="settingsModalDialog">
         <div class="modal-header">
-          <h2>⚙️ Terminal & Telegram Settings</h2>
+          <div class="settings-modal-header-left">
+            <h2>⚙️ Terminal & Telegram Settings</h2>
+            <label class="notes-pill-switch" title="Toggle between clean uncluttered layout with hover notes vs. expanded text walls">
+              <input type="checkbox" id="toggleSettingsHoverNotes" checked />
+              <span class="pill-slider"></span>
+              <span class="pill-text">💡 Hover Notes</span>
+            </label>
+          </div>
           <button class="modal-close" id="btnCloseSettings">&times;</button>
         </div>
         <div class="modal-body">
@@ -444,15 +485,16 @@
                 <label for="tgEnabled">Enable Telegram Signal Dispatch</label>
                 <input type="checkbox" id="tgEnabled" />
               </div>
+              <small class="setting-note">Dispatches real-time AI signal cards, TP1 breakeven notifications, and trade resolution summaries directly to your Telegram bot.</small>
               <div class="form-group">
                 <label for="tgBotToken">Telegram Bot Token</label>
                 <input type="password" id="tgBotToken" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" />
-                <small>Create a bot with @BotFather on Telegram and paste token here.</small>
+                <small class="setting-note">Create a bot with @BotFather on Telegram and paste token here.</small>
               </div>
               <div class="form-group">
                 <label for="tgChatId">Telegram Chat ID</label>
                 <input type="text" id="tgChatId" placeholder="@channel_name or numeric ID e.g. 123456789" />
-                <small>Your personal user ID or channel ID. Use @userinfobot to find your ID.</small>
+                <small class="setting-note">Your personal user ID or channel ID. Use @userinfobot to find your ID.</small>
               </div>
               <div class="form-group">
                 <button type="button" class="btn btn-outline" id="btnTestTelegram">
@@ -468,15 +510,17 @@
               <div class="form-group">
                 <label for="maxSpreadRatio">Max Spread vs. SL Ratio</label>
                 <input type="number" id="maxSpreadRatio" step="0.01" min="0.01" max="0.20" value="0.05" />
-                <small>0.05 = Spread must be &lt; 5% of Stop-Loss distance.</small>
+                <small class="setting-note">Default: 0.05. Ensures spread is &lt; 5% of Stop-Loss distance, protecting your capital from high spread friction.</small>
               </div>
               <div class="form-group">
                 <label for="minConviction">Minimum AI Conviction %</label>
                 <input type="number" id="minConviction" min="40" max="95" value="65" />
+                <small class="setting-note">Minimum confidence score % required for AI forecasts to generate actionable trade setups (Default: 65%).</small>
               </div>
               <div class="form-group">
                 <label for="scanInterval">Background Scan Interval (Minutes)</label>
                 <input type="number" id="scanInterval" min="5" max="120" value="15" />
+                <small class="setting-note">Frequency in minutes at which the background engine scans active assets across configured timeframes (Default: 15 min).</small>
               </div>
               <div class="form-group">
                 <label>Multi-Timeframe Scanning Targets</label>
@@ -487,33 +531,38 @@
                   <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="4h" checked /> 4h (Swing)</label>
                   <label class="tf-check-label"><input type="checkbox" class="scan-tf-check" value="1d" /> 1D (Daily)</label>
                 </div>
-                <small>Select all timeframes the background AI engine will scan across your watchlist.</small>
+                <small class="setting-note">Timeframes scanned by the background engine. Higher timeframes (1h, 4h) produce significantly higher win rates and lower spread drag.</small>
               </div>
               <div class="form-group">
                 <label for="forecastCandles">Forecast Horizon / Signal Lifespan (Candles)</label>
                 <input type="number" id="forecastCandles" min="1" max="20" value="5" />
-                <small>Number of future candles forecasted and monitored for TP/SL before expiration (Default: 5). Cleanly adjust this as you experiment.</small>
+                <small class="setting-note">Number of future candles monitored for TP/SL before expiration (Default: 5). Cleanly adjust as you experiment.</small>
               </div>
               <div class="form-group toggle-group">
                 <label for="showCountdownTimers">Display Live Candle & Signal Countdown Timers</label>
                 <input type="checkbox" id="showCountdownTimers" checked />
               </div>
+              <small class="setting-note">Shows live real-time countdown clocks for candle closing and remaining signal duration in the terminal.</small>
               <div class="form-group toggle-group">
                 <label for="showChartTradeMarkers">Display Trade History Indicators on Chart</label>
                 <input type="checkbox" id="showChartTradeMarkers" checked />
               </div>
+              <small class="setting-note">Plots visual entry markers, Stop-Loss lines, Take-Profit targets, and exit badges directly onto the TradingView chart.</small>
               <div class="form-group toggle-group">
                 <label for="autoScanEnabled">Enable Automated Background Scanning</label>
                 <input type="checkbox" id="autoScanEnabled" checked />
               </div>
+              <small class="setting-note">Runs background AI market scanning automatically according to your scan interval.</small>
               <div class="form-group toggle-group">
                 <label for="filterLowLiquiditySessions">Filter Low-Liquidity & Asian Sessions (Non-Crypto)</label>
                 <input type="checkbox" id="filterLowLiquiditySessions" checked />
               </div>
+              <small class="setting-note">Institutional Filter: Suppresses Forex, Indices, and Metals during low-volume Asian (00:00-08:00 UTC) and Off-Hours sessions. Crypto runs 24/7.</small>
               <div class="form-group toggle-group">
                 <label for="requireLondonNyOverlap">Require London-NY Overlap Only (Strict Institutional)</label>
                 <input type="checkbox" id="requireLondonNyOverlap" />
               </div>
+              <small class="setting-note">Strict Institutional Filter: Restricts trading strictly to the London & New York institutional overlap window (13:00-16:30 UTC).</small>
             </div>
 
             <!-- Google TimesFM Foundation Model Arbiter -->
@@ -523,16 +572,16 @@
                 <label for="timesfmEnabled">Enable TimesFM Secondary Cross-Verification</label>
                 <input type="checkbox" id="timesfmEnabled" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Runs Google's 200M foundation model exclusively on high-conviction setups to verify directional consensus.</small>
+              <small class="setting-note">Runs Google's 200M foundation model exclusively on high-conviction setups to verify directional consensus.</small>
               <div class="form-group toggle-group">
                 <label for="timesfmSuppressConflict">Conservative Mode (Suppress on AI Divergence)</label>
                 <input type="checkbox" id="timesfmSuppressConflict" />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Cancels trade alerts if TimesFM predicts the opposite direction of the primary model.</small>
+              <small class="setting-note">Cancels trade alerts if TimesFM predicts the opposite direction of the primary model.</small>
               <div class="form-group">
                 <label for="timesfmBoost">Confluence Conviction Boost (%)</label>
                 <input type="number" id="timesfmBoost" min="5" max="25" value="12" />
-                <small>Bonus confidence % awarded when both AI models agree on 5-candle trajectory.</small>
+                <small class="setting-note">Bonus confidence % awarded when both AI models agree on 5-candle trajectory.</small>
               </div>
             </div>
 
@@ -548,19 +597,19 @@
                 <label for="autoTradeEnabled">Enable Auto-Trade Execution on MT5</label>
                 <input type="checkbox" id="autoTradeEnabled" />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically dispatches market orders to FundedNext MT5 whenever an actionable signal meets the high-conviction criteria below.</small>
+              <small class="setting-note">Automatically dispatches market orders to FundedNext MT5 whenever an actionable signal meets high-conviction criteria.</small>
               
               <div class="form-group">
                 <label for="autoTradeMinConviction">Auto-Trade Minimum Conviction %</label>
                 <input type="number" id="autoTradeMinConviction" min="50" max="95" value="80" />
-                <small>Only triggers automatic execution on exceptionally strong AI setups (Recommended: &ge; 80%).</small>
+                <small class="setting-note">Only triggers automatic execution on exceptionally strong AI setups (Recommended: &ge; 80%).</small>
               </div>
 
               <div class="form-group toggle-group">
                 <label for="autoTradeDualAiOnly">Require Dual AI Confirmation (TimesFM Agreement)</label>
                 <input type="checkbox" id="autoTradeDualAiOnly" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Restricts auto-execution to setups where both the Primary AI Model and Google TimesFM agree in direction.</small>
+              <small class="setting-note">Restricts auto-execution to setups where both the Primary AI Model and Google TimesFM agree in direction.</small>
 
               <div class="form-group">
                 <label>Allowed Auto-Execution Timeframes</label>
@@ -571,7 +620,7 @@
                   <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="4h" checked /> 4h (Swing)</label>
                   <label class="tf-check-label"><input type="checkbox" class="auto-trade-tf-check" value="1d" /> 1D (Daily)</label>
                 </div>
-                <small>Select which timeframes are permitted to automatically place trades on MT5.</small>
+                <small class="setting-note">Select which timeframes are permitted to automatically place trades on MT5.</small>
               </div>
 
               <!-- Subsection 2: Position Sizing & Lifespan Guard (Applies to Auto & Manual Trades) -->
@@ -582,7 +631,7 @@
               <div class="form-group">
                 <label for="defaultDollarRisk">Default Trade Risk ($ Amount)</label>
                 <input type="number" id="defaultDollarRisk" min="5" max="10000" step="5" value="50" />
-                <small>The dollar amount to risk per trade. Volume in lots is automatically calculated based on the dynamic SL distance so maximum loss matches this value exactly. Also synced to Telegram signal alerts.</small>
+                <small class="setting-note">Exact dollar risk per trade. Volume in lots is automatically calculated so maximum loss matches this value exactly.</small>
               </div>
 
               <div class="form-group">
@@ -591,14 +640,14 @@
                   <option value="single">Single Target (100% Volume to TP1)</option>
                   <option value="split">Split 50/50 Mode (50% Volume to TP1, 50% to TP2 Runner)</option>
                 </select>
-                <small>In Split 50/50 Mode, total dollar risk is split in half across two orders, keeping total max loss capped at your chosen risk while capturing extended runner profits.</small>
+                <small class="setting-note">In Split 50/50 Mode, half position is banked at TP1 and runner Stop Loss is set to Breakeven (0.00R loss risk).</small>
               </div>
 
               <div class="form-group toggle-group">
-                <label for="autoCloseOnExpiry">Auto-Close MT5 Positions on Signal Lifespan Expiry (Auto &amp; 1-Click Trades)</label>
+                <label for="autoCloseOnExpiry">Auto-Close MT5 Positions on Signal Lifespan Expiry</label>
                 <input type="checkbox" id="autoCloseOnExpiry" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Automatically closes open MT5 positions at market price when the signal reaches its lifespan candle horizon (e.g. 5th candle) without hitting TP or SL. Protects BOTH Automated AI executions and Manual 1-Click trades placed from the terminal.</small>
+              <small class="setting-note">Automatically closes open MT5 positions at market price when the 5th candle horizon expires without hitting TP or SL.</small>
 
               <!-- Subsection 3: FundedNext Prop Firm Guardrails -->
               <div style="font-size: 11px; font-weight: 700; color: var(--accent-green); margin: 16px 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(16, 185, 129, 0.2); padding-bottom: 4px;">
@@ -609,37 +658,37 @@
                 <label for="propGuardEnabled">Enable FundedNext Account Breach Protection</label>
                 <input type="checkbox" id="propGuardEnabled" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Enforces FundedNext risk management limits on both Auto-Trades and Manual 1-Click trades, protecting against hard account breaches.</small>
+              <small class="setting-note">Enforces FundedNext risk management limits on Auto-Trades and Manual 1-Click trades, protecting against hard account breaches.</small>
 
               <div class="form-group">
                 <label for="propMaxTrades">Max Simultaneous Open Positions</label>
                 <input type="number" id="propMaxTrades" min="1" max="20" value="3" />
-                <small>Maximum concurrent positions allowed on the account (e.g. 3 trades). Blocks new entries until a position closes.</small>
+                <small class="setting-note">Maximum concurrent positions allowed on the account (e.g. 3 trades). Blocks new entries until a position closes.</small>
               </div>
 
               <div class="form-group">
                 <label for="propMaxPerSymbol">Max Concurrent Trades per Symbol</label>
                 <input type="number" id="propMaxPerSymbol" min="1" max="5" value="1" />
-                <small>Prevents stacking multiple positions into the same asset ticker (e.g. max 1 open trade per symbol).</small>
+                <small class="setting-note">Prevents stacking multiple positions into the same asset ticker (e.g. max 1 open trade per symbol).</small>
               </div>
 
               <div class="form-group">
                 <label for="propMinFreeMargin">Minimum Free Margin Buffer (%)</label>
                 <input type="number" id="propMinFreeMargin" min="10" max="90" step="5" value="50" />
-                <small>Blocks new trades if free margin drops below this percentage, preventing margin calls or stop-outs.</small>
+                <small class="setting-note">Blocks new trades if free margin drops below this percentage, preventing margin calls or stop-outs.</small>
               </div>
 
               <div class="form-group">
                 <label for="propMaxDailyDrawdown">Daily Drawdown Safety Breaker (%)</label>
                 <input type="number" id="propMaxDailyDrawdown" min="1.0" max="5.0" step="0.5" value="3.5" />
-                <small>Halts new executions if today's drawdown exceeds this safety threshold (FundedNext hard limit is 5.0%).</small>
+                <small class="setting-note">Halts new executions if today's drawdown exceeds this safety threshold (FundedNext hard limit is 5.0%).</small>
               </div>
 
               <div class="form-group toggle-group">
                 <label for="propPreventCorrelated">Prevent Correlated Currency Exposure</label>
                 <input type="checkbox" id="propPreventCorrelated" checked />
               </div>
-              <small style="color:var(--text-muted);display:block;margin-bottom:12px;">Prevents opening &gt;2 positions sharing the same base currency (e.g. EURUSD and EURJPY simultaneously).</small>
+              <small class="setting-note">Prevents opening &gt;2 positions sharing the same base currency (e.g. EURUSD and EURJPY simultaneously).</small>
             </div>
 
             <div class="modal-footer">

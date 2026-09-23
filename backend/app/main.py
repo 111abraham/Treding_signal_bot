@@ -436,14 +436,31 @@ async def get_performance(
     min_conviction: Optional[float] = Query(None),
     timeframe: Optional[str] = Query(None),
     dual_ai_only: Optional[bool] = Query(None),
+    session: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    symbol: Optional[str] = Query(None),
     limit: int = Query(100)
 ):
     """
     Returns closed and active trade outcome metrics, win-rate, profit factor,
-    and performance filtered by minimum conviction %, timeframe, and Dual AI status.
+    and performance filtered by minimum conviction %, timeframe, session, asset category, and Dual AI status.
     """
-    stats = outcome_tracker.get_statistics(min_conviction=min_conviction, timeframe=timeframe, dual_ai_only=dual_ai_only)
-    trades = outcome_tracker.get_trades_log(limit=limit, timeframe=timeframe, dual_ai_only=dual_ai_only)
+    stats = outcome_tracker.get_statistics(
+        min_conviction=min_conviction,
+        timeframe=timeframe,
+        dual_ai_only=dual_ai_only,
+        session=session,
+        category=category,
+        symbol=symbol
+    )
+    trades = outcome_tracker.get_trades_log(
+        limit=limit,
+        timeframe=timeframe,
+        dual_ai_only=dual_ai_only,
+        session=session,
+        category=category,
+        symbol=symbol
+    )
     return {
         "stats": stats,
         "active_trades": trades["active"],
@@ -457,31 +474,42 @@ async def export_performance_history(
     format: str = Query("json", description="Export format: 'json' or 'csv'"),
     timeframe: Optional[str] = Query(None, description="Optional timeframe filter"),
     min_conviction: Optional[float] = Query(None, description="Optional min conviction % filter"),
-    dual_ai_only: Optional[bool] = Query(None, description="Optional Dual AI only filter")
+    dual_ai_only: Optional[bool] = Query(None, description="Optional Dual AI only filter"),
+    session: Optional[str] = Query(None, description="Optional session filter (e.g. London, Overlap, Asian)"),
+    category: Optional[str] = Query(None, description="Optional category filter (e.g. Forex, Crypto, Indices)"),
+    symbol: Optional[str] = Query(None, description="Optional symbol filter (e.g. BTC, NDX)")
 ):
     """Exports full trade outcome ledger as a downloadable JSON or CSV file (ready for Excel)."""
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
     tf_tag = f"_{timeframe}" if timeframe and timeframe.upper() != "ALL" else ""
     dual_tag = "_dual_ai" if dual_ai_only else ""
+    sess_tag = f"_{session}" if session and session.upper() != "ALL" else ""
+    cat_tag = f"_{category}" if category and category.upper() != "ALL" else ""
 
     if format.lower() == "csv":
         csv_content = outcome_tracker.export_csv(
             timeframe=timeframe,
             min_conviction=min_conviction,
-            dual_ai_only=dual_ai_only
+            dual_ai_only=dual_ai_only,
+            session=session,
+            category=category,
+            symbol=symbol
         )
         headers = {
-            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}{dual_tag}_{now_str}.csv"'
+            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}{sess_tag}{cat_tag}{dual_tag}_{now_str}.csv"'
         }
         return Response(content=csv_content, media_type="text/csv", headers=headers)
     else:
         data = outcome_tracker.export_history(
             timeframe=timeframe,
             min_conviction=min_conviction,
-            dual_ai_only=dual_ai_only
+            dual_ai_only=dual_ai_only,
+            session=session,
+            category=category,
+            symbol=symbol
         )
         headers = {
-            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}{dual_tag}_{now_str}.json"'
+            "Content-Disposition": f'attachment; filename="trade_history{tf_tag}{sess_tag}{cat_tag}{dual_tag}_{now_str}.json"'
         }
         return JSONResponse(content=data, headers=headers)
 
