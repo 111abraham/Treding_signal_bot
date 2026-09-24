@@ -166,6 +166,15 @@ class ScanEngine:
                                         asset_cat = (asset.get("category") or "").lower()
                                         cat_allowed = asset_cat in auto_trade_cats or (asset_cat in ("commodities", "metals") and ("commodities" in auto_trade_cats or "metals" in auto_trade_cats))
 
+                                    # Prevent duplicate signal/trade if this symbol & timeframe is already actively in-play
+                                    already_active = any(
+                                        t.get("symbol", "").upper() == sym.upper() and t.get("timeframe") == tf
+                                        for t in outcome_tracker.active_trades
+                                    )
+                                    if already_active:
+                                        logger.debug(f"Trade for {sym} ({tf}) is already actively running. Skipping duplicate scan alert.")
+                                        return None
+
                                     if auto_trade_enabled and tf_allowed and session_allowed and cat_allowed and signal.get("conviction", 0) >= auto_trade_min_conv:
                                         dual_ai_ok = True
                                         if auto_trade_dual_ai_only:
@@ -202,11 +211,15 @@ class ScanEngine:
                                             except Exception as e_auto:
                                                 logger.error(f"Error during auto-execution on MT5 for {sym}: {e_auto}")
 
-                                    new_signals.append(signal)
-                                    self._add_to_history(signal)
-                                    outcome_tracker.register_signal(signal)
-                                    await self._dispatch_telegram(signal, force_notify, telegram_enabled)
-                                    return signal
+                                    registered = outcome_tracker.register_signal(signal)
+                                    if registered:
+                                        new_signals.append(signal)
+                                        self._add_to_history(signal)
+                                        await self._dispatch_telegram(signal, force_notify, telegram_enabled)
+                                        return signal
+                                    else:
+                                        logger.debug(f"Trade for {sym} ({tf}) was already tracked. Skipping duplicate history/telegram recording.")
+                                        return None
                     except Exception as ex:
                         logger.error(f"Error scanning {sym} on {tf}: {ex}")
                     finally:
