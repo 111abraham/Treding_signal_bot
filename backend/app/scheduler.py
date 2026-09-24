@@ -1,6 +1,8 @@
 import asyncio
 import datetime
+import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from app.config import config_manager
 from app.data_fetcher import MarketDataFetcher, get_current_session_info
@@ -13,11 +15,15 @@ from app.market_liveness import market_liveness
 
 logger = logging.getLogger(__name__)
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+SIGNALS_FILE = BASE_DIR / "signals_history.json"
+
 
 class ScanEngine:
     """Orchestrates asset scanning, AI multi-step forecasting, and signal dispatching."""
 
-    def __init__(self):
+    def __init__(self, storage_path: Path = SIGNALS_FILE):
+        self.storage_path = storage_path
         self.is_scanning = False
         self.is_initial_boot = True  # Guards against blasting 20+ alerts on startup
         self.last_scan_time: Optional[str] = None
@@ -25,6 +31,7 @@ class ScanEngine:
         self.latest_forecasts: Dict[str, Dict[str, Any]] = {}
         self.alerted_cooldown: Dict[str, datetime.datetime] = {}
         self.current_status: str = "Idle"
+        self._load_history()
 
     async def scan_all_assets(self, force_notify: bool = False) -> Dict[str, Any]:
         """Runs a multi-timeframe scan cycle across all active watchlist assets concurrently."""
@@ -227,13 +234,75 @@ class ScanEngine:
         finally:
             self.is_scanning = False
 
-    def _add_to_history(self, signal: Dict[str, Any]):
-        # Prepend to history, retain up to 1000 entries
-        self.signal_history.insert(0, signal)
-        if len(self.signal_history) > 1000:
-            self.signal_history = self.signal_history[:1000]
+    def _load_history(self):
+        """Loads signals history from storage file without any hard cap. Hydrates from trade_outcomes.json if needed."""
+        try:
+            if self.storage_path.exists():
+                with open(self.storage_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        self.signal_history = data
+                    elif isinstance(data, dict):
+                        self.signal_history = data.get("signals", [])
+            
+            # If signals history is empty, hydrate from trade_outcomes.json so historical signals are preserved
+            if not self.signal_history:
+                outcomes_path = self.storage_path.parent / "trade_outcomes.json"
+                if outcomes_path.exists():
+                    with open(outcomes_path, "r", encoding="utf-8") as f:
+                        odata = json.load(f)
+                        raw = odata.get("active_trades", []) + odata.get("closed_trades", [])
+                        seen_ids = set()
+                        for t in raw:
+                            tid = t.get("id") or f"{t.get('symbol')}_{t.get('timeframe')}_{t.get('direction')}_{t.get('opened_at') or t.get('timestamp')}"
+                            if tid in seen_ids:
+                                continue
+                            seen_ids.add(tid)
+                            sig = dict(t)
+                            if "opened_at" in sig and "timestamp" not in sig:
+                                sig["timestamp"] = sig["opened_at"]
+                            if "entry_candle_unix" in sig and "candle_unix" not in sig:
+                                sig["candle_unix"] = sig["entry_candle_unix"]
+                            self.signal_history.append(sig)
+                    # Sort newest first
+                    self.signal_history.sort(
+                        key=lambda s: s.get("candle_unix") or s.get("entry_candle_unix") or 0,
+                        reverse=True
+                    )
+                    self._save_history()
+        except Exception as e:
+            logger.warning(f"Error loading signal history from {self.storage_path}: {e}")
+            if not self.signal_history:
+                self.signal_history = []
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def _save_history(self):
+        """Persists the full signal history ledger to disk with no hard cap."""
+        try:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.storage_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "signals": self.signal_history,
+                    "total": len(self.signal_history),
+                    "last_updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                }, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving signal history to {self.storage_path}: {e}")
+
+    def _add_to_history(self, signal: Dict[str, Any]):
+        """Prepends new signal to history with NO hard cap and persists to disk."""
+        sig_id = signal.get("id") or f"{signal.get('symbol')}_{signal.get('timeframe')}_{signal.get('direction')}_{signal.get('candle_time') or signal.get('timestamp')}"
+        signal["id"] = sig_id
+
+        # Remove existing duplicate if present so latest update is at top
+        self.signal_history = [s for s in self.signal_history if s.get("id") != sig_id]
+        self.signal_history.insert(0, signal)
+        # No hard cap: all signals retained indefinitely
+        self._save_history()
+
+    def get_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Returns the signal history. If limit is None or <=0, returns the entire ledger with no hard cap."""
+        if limit is not None and limit > 0:
+            return self.signal_history[:limit]
         return self.signal_history
 
     async def _dispatch_telegram(self, signal: Dict[str, Any], force_notify: bool, telegram_enabled: bool):

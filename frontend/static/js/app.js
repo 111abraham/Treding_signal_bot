@@ -1521,6 +1521,7 @@ function renderSignalsList() {
   }
 
   signalHistoryList.innerHTML = "";
+  const frag = document.createDocumentFragment();
   filtered.forEach((sig) => {
     const card = document.createElement("div");
     card.className = "signal-card-mini";
@@ -1585,8 +1586,9 @@ function renderSignalsList() {
       frameChartToCandle(targetUnix, sig.timeframe);
     });
 
-    signalHistoryList.appendChild(card);
+    frag.appendChild(card);
   });
+  signalHistoryList.appendChild(frag);
 }
 
 async function loadSignals() {

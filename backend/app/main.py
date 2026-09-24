@@ -567,10 +567,11 @@ async def trigger_scan(background_tasks: BackgroundTasks):
 
 
 @app.get("/api/signals")
-async def get_signals():
+async def get_signals(limit: Optional[int] = Query(None, description="Optional limit for signals; defaults to None (unlimited/no hard cap)")):
+    signals = scan_engine.get_history(limit=limit)
     return {
-        "signals": scan_engine.get_history(),
-        "total": len(scan_engine.get_history())
+        "signals": signals,
+        "total": len(signals)
     }
 
 
